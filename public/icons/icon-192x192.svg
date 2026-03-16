@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#059669"/>
+      <stop offset="100%" style="stop-color:#10b981"/>
+    </linearGradient>
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#d1fae5"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="38" fill="url(#bgGrad)"/>
+  <g transform="translate(96, 96)">
+    <!-- Plate -->
+    <circle cx="0" cy="8" r="52" fill="white" opacity="0.95"/>
+    <circle cx="0" cy="8" r="42" fill="none" stroke="#059669" stroke-width="2" opacity="0.3"/>
+    <!-- Fork -->
+    <g transform="translate(-55, -20) rotate(-30)">
+      <rect x="0" y="0" width="4" height="45" rx="2" fill="white"/>
+      <rect x="-6" y="0" width="3" height="20" rx="1.5" fill="white"/>
+      <rect x="7" y="0" width="3" height="20" rx="1.5" fill="white"/>
+    </g>
+    <!-- Leaf/Healthy symbol -->
+    <path d="M-5,-15 Q15,-35 30,-15 Q15,5 -5,-15" fill="url(#leafGrad)" transform="translate(0, 5)"/>
+    <path d="M-5,-15 Q-5,-5 5,0" fill="none" stroke="#059669" stroke-width="2" transform="translate(0, 5)"/>
+    <!-- Heart for health -->
+    <path d="M0,-8 C-5,-15 -15,-12 -15,-5 C-15,3 0,12 0,12 C0,12 15,3 15,-5 C15,-12 5,-15 0,-8Z" 
+          fill="#ef4444" transform="translate(0, 15) scale(0.5)" opacity="0.9"/>
+  </g>
+</svg>

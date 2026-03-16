@@ -1,0 +1,297 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  password        String
+  name            String
+  avatar          String?
+  isPremium       Boolean  @default(false)
+  stripeCustomerId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  favorites       Favorite[]
+  votes           Vote[]
+  messages        Message[]
+  familyMemberships FamilyMember[]
+  ownedFamilies   Family[]       @relation("FamilyOwner")
+  notifications   Notification[]
+  mealSuggestions MealSuggestion[]
+  settings        UserSettings?
+  mealPlans       MealPlan[]
+}
+
+model UserSettings {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  
+  // Dietary Preferences
+  dietaryPreferences    String[] @default([])
+  allergies             String[] @default([])
+  calorieGoal           Int?
+  proteinGoal           Int?
+  
+  // Notification Settings
+  emailNotifications    Boolean  @default(true)
+  pushNotifications     Boolean  @default(true)
+  pollReminders         Boolean  @default(true)
+  familyUpdates         Boolean  @default(true)
+  
+  // App Preferences
+  theme                 String   @default("system")
+  language              String   @default("en")
+  measurementUnit       String   @default("metric")
+  defaultCuisine        String?
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Family {
+  id          String   @id @default(cuid())
+  name        String
+  inviteCode  String   @unique @default(cuid())
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner       User     @relation("FamilyOwner", fields: [ownerId], references: [id])
+  members     FamilyMember[]
+  mealPolls   MealPoll[]
+  messages    Message[]
+}
+
+model FamilyMember {
+  id        String   @id @default(cuid())
+  userId    String
+  familyId  String
+  role      FamilyRole @default(MEMBER)
+  joinedAt  DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family    Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, familyId])
+}
+
+enum FamilyRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Favorite {
+  id          String   @id @default(cuid())
+  userId      String
+  mealId      String
+  mealName    String
+  mealData    Json
+  category    String
+  dietType    String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mealId])
+}
+
+model MealPoll {
+  id          String   @id @default(cuid())
+  familyId    String
+  category    MealCategory
+  date        DateTime @db.Date
+  status      PollStatus @default(ACTIVE)
+  createdAt   DateTime @default(now())
+  closesAt    DateTime
+
+  family      Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  suggestions MealSuggestion[]
+  votes       Vote[]
+
+  @@unique([familyId, category, date])
+}
+
+enum MealCategory {
+  BREAKFAST
+  LUNCH
+  DINNER
+  JUICES
+}
+
+enum PollStatus {
+  ACTIVE
+  CLOSED
+  COMPLETED
+}
+
+model MealSuggestion {
+  id          String   @id @default(cuid())
+  pollId      String
+  userId      String
+  mealId      String
+  mealName    String
+  mealData    Json
+  createdAt   DateTime @default(now())
+
+  poll        MealPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  votes       Vote[]
+}
+
+model Vote {
+  id           String   @id @default(cuid())
+  userId       String
+  pollId       String
+  suggestionId String
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  poll         MealPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  suggestion   MealSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pollId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  familyId  String
+  userId    String
+  content   String
+  type      MessageType @default(TEXT)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  family    Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum MessageType {
+  TEXT
+  MEAL_SHARE
+  POLL_CREATED
+  POLL_RESULT
+  MEMBER_JOINED
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      NotificationType
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum NotificationType {
+  POLL_CREATED
+  POLL_ENDING
+  POLL_RESULT
+  FAMILY_INVITE
+  NEW_MESSAGE
+  MEAL_SUGGESTION
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  stripePaymentId String   @unique
+  userId          String
+  amount          Int
+  currency        String   @default("usd")
+  status          PaymentStatus
+  type            PaymentType
+  createdAt       DateTime @default(now())
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentType {
+  SUBSCRIPTION
+  ONE_TIME
+}
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  stripeSubscriptionId String   @unique
+  stripePriceId        String
+  status               SubscriptionStatus
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  UNPAID
+  TRIALING
+}
+
+// Meal Planning
+model MealPlan {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  startDate       DateTime @db.Date
+  endDate         DateTime @db.Date
+  targetCalories  Int?
+  diet            String?
+  excludeIngredients String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meals           PlannedMeal[]
+}
+
+model PlannedMeal {
+  id              String   @id @default(cuid())
+  mealPlanId      String
+  date            DateTime @db.Date
+  slot            MealSlot
+  recipeId        String
+  recipeName      String
+  recipeImage     String?
+  recipeData      Json
+  servings        Int      @default(1)
+  completed       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  mealPlan        MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([mealPlanId, date, slot])
+}
+
+enum MealSlot {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "./erd.svg"
+}
