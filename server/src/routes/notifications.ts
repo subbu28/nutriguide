@@ -1,104 +1,108 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { authenticate } from '../middleware/auth.js';
 
-export async function notificationRoutes(fastify: FastifyInstance) {
-  // Get user's notifications
-  fastify.get('/', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { unreadOnly = false, limit = 50 } = request.query as { 
-      unreadOnly?: boolean; 
-      limit?: number;
-    };
+export default async function notificationRoutes(fastify: FastifyInstance) {
+  // Get notifications
+  fastify.get('/', { preHandler: authenticate }, async (request, reply) => {
+    const querySchema = z.object({
+      unreadOnly: z.enum(['true', 'false']).default('false'),
+      page: z.string().default('1'),
+      limit: z.string().default('20'),
+    });
 
-    const where: any = { userId: request.user.id };
-    if (unreadOnly) {
+    const { unreadOnly, page, limit } = querySchema.parse(request.query);
+    const pageNum = parseInt(page);
+    const limitNum = Math.min(parseInt(limit), 50);
+
+    const where: any = { userId: request.user!.id };
+    if (unreadOnly === 'true') {
       where.read = false;
     }
 
-    const notifications = await prisma.notification.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: Number(limit)
-    });
+    const [notifications, total, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+      }),
+      prisma.notification.count({ where: { userId: request.user!.id } }),
+      prisma.notification.count({ where: { userId: request.user!.id, read: false } }),
+    ]);
 
-    return { notifications };
+    return reply.send({
+      notifications,
+      unreadCount,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        hasMore: total > pageNum * limitNum,
+      },
+    });
   });
 
   // Get unread count
-  fastify.get('/unread-count', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const count = await prisma.notification.count({
-      where: { userId: request.user.id, read: false }
-    });
+  fastify.get('/unread-count', { preHandler: authenticate }, async (request, reply) => {
+    try {
+      const count = await prisma.notification.count({
+        where: {
+          userId: request.user!.id,
+          read: false,
+        },
+      });
 
-    return { count };
+      if (!reply.sent) {
+        return reply.send({ count });
+      }
+    } catch (error) {
+      if (!reply.sent) {
+        return reply.status(500).send({ error: 'Failed to get unread count' });
+      }
+    }
   });
 
-  // Mark notification as read
-  fastify.patch('/:notificationId/read', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { notificationId } = request.params as { notificationId: string };
+  // Mark as read
+  fastify.patch('/:id/read', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
 
-    const notification = await prisma.notification.findUnique({
-      where: { id: notificationId }
+    await prisma.notification.updateMany({
+      where: {
+        id,
+        userId: request.user!.id,
+      },
+      data: { read: true },
     });
 
-    if (!notification || notification.userId !== request.user.id) {
-      return reply.status(404).send({ error: 'Notification not found' });
-    }
-
-    await prisma.notification.update({
-      where: { id: notificationId },
-      data: { read: true }
-    });
-
-    return { message: 'Marked as read' };
+    return reply.send({ message: 'Marked as read' });
   });
 
   // Mark all as read
-  fastify.patch('/read-all', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.patch('/read-all', { preHandler: authenticate }, async (request, reply) => {
     await prisma.notification.updateMany({
-      where: { userId: request.user.id, read: false },
-      data: { read: true }
+      where: {
+        userId: request.user!.id,
+        read: false,
+      },
+      data: { read: true },
     });
 
-    return { message: 'All notifications marked as read' };
+    return reply.send({ message: 'All notifications marked as read' });
   });
 
   // Delete notification
-  fastify.delete('/:notificationId', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { notificationId } = request.params as { notificationId: string };
+  fastify.delete('/:id', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string };
 
-    const notification = await prisma.notification.findUnique({
-      where: { id: notificationId }
-    });
-
-    if (!notification || notification.userId !== request.user.id) {
-      return reply.status(404).send({ error: 'Notification not found' });
-    }
-
-    await prisma.notification.delete({
-      where: { id: notificationId }
-    });
-
-    return { message: 'Deleted' };
-  });
-
-  // Clear all notifications
-  fastify.delete('/clear-all', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
     await prisma.notification.deleteMany({
-      where: { userId: request.user.id }
+      where: {
+        id,
+        userId: request.user!.id,
+      },
     });
 
-    return { message: 'All notifications cleared' };
+    return reply.send({ message: 'Notification deleted' });
   });
 }

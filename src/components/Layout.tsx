@@ -1,264 +1,196 @@
-import { useEffect } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore';
-import { useNotificationStore } from '../stores/notificationStore';
-import { motion, AnimatePresence } from 'motion/react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../stores/authStore.js';
+import { useNotificationStore } from '../stores/notificationStore.js';
+import { Footer } from './Footer.js';
 import { 
-  Utensils, Heart, Users, Bell, Crown, User, LogOut, 
-  Menu, X, Home, Settings, Calendar, ShoppingCart
+  Home, 
+  Heart, 
+  Users, 
+  Calendar, 
+  ShoppingCart, 
+  Sparkles, 
+  ChefHat, 
+  User, 
+  Bell,
+  Menu,
+  X,
+  Crown
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export function Layout() {
-  const { user, isAuthenticated, logout, checkAuth, isLoading } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const { unreadCount, fetchUnreadCount } = useNotificationStore();
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    checkAuth();
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 60000); // Check every minute
+    return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchUnreadCount();
-    }
-  }, [isAuthenticated]);
 
   const handleLogout = async () => {
     await logout();
-    navigate('/');
-    setShowUserMenu(false);
+    navigate('/login');
   };
 
-  const navItems = [
-    { to: '/', icon: Home, label: 'Home' },
-    { to: '/meal-planner', icon: Calendar, label: 'Meal Planner' },
-    { to: '/meal-history', icon: Utensils, label: 'History', auth: true },
-    { to: '/shopping-list', icon: ShoppingCart, label: 'Shopping' },
-    { to: '/favorites', icon: Heart, label: 'Favorites', auth: true },
-    { to: '/family', icon: Users, label: 'Family', auth: true },
-    { to: '/premium', icon: Crown, label: 'Premium' },
+  const navigation = [
+    { name: 'Home', href: '/', icon: Home },
+    { name: 'Recipes', href: '/recipes', icon: ChefHat },
+    { name: 'Favorites', href: '/favorites', icon: Heart },
+    { name: 'Family', href: '/family', icon: Users },
+    { name: 'Meal Planner', href: '/meal-planner', icon: Calendar },
+    { name: 'Shopping', href: '/shopping-lists', icon: ShoppingCart },
+    { name: 'AI Assistant', href: '/ai-assistant', icon: Sparkles, badge: 'NEW' },
   ];
 
   return (
-    <div className="min-h-screen bg-[#F8F7F4] text-stone-900 font-sans selection:bg-emerald-100">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#F8F7F4]/80 backdrop-blur-md border-b border-stone-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50">
+      {/* Top Navigation */}
+      <nav className="bg-white shadow-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-3">
-              <div className="bg-emerald-600 p-2 rounded-xl">
-                <Utensils className="w-6 h-6 text-white" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-xl font-bold tracking-tight text-stone-900">NutriGuide</h1>
-                <p className="text-[10px] text-stone-500 font-medium uppercase tracking-widest">
-                  Healthy Meal Discovery
-                </p>
-              </div>
-            </Link>
+            <div className="flex items-center">
+              <Link to="/" className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
+                  <ChefHat className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-xl font-bold text-gray-900 hidden sm:block">NutriGuide</span>
+              </Link>
+            </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => {
-                if (item.auth && !isAuthenticated) return null;
-                const isActive = location.pathname === item.to || 
-                  (item.to !== '/' && location.pathname.startsWith(item.to));
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'text-stone-600 hover:bg-stone-100'
-                    }`}
-                  >
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            {/* Right Side */}
-            <div className="flex items-center gap-3">
-              {isAuthenticated ? (
-                <>
-                  {/* Logout Button - Always Visible */}
-                  <button
-                    onClick={handleLogout}
-                    className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm font-medium text-stone-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Logout</span>
-                  </button>
-
-                  {/* Notifications */}
-                  <Link
-                    to="/notifications"
-                    className="relative p-2 hover:bg-stone-100 rounded-lg transition-colors"
-                  >
-                    <Bell className="w-5 h-5 text-stone-600" />
-                    {unreadCount > 0 && (
-                      <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    )}
-                  </Link>
-
-                  {/* User Menu */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowUserMenu(!showUserMenu)}
-                      className="flex items-center gap-2 p-1.5 hover:bg-stone-100 rounded-lg transition-colors"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-sm font-bold text-emerald-700">
-                        {user?.name?.charAt(0).toUpperCase()}
-                      </div>
-                      {user?.isPremium && (
-                        <Crown className="w-4 h-4 text-yellow-500" />
-                      )}
-                    </button>
-
-                    <AnimatePresence>
-                      {showUserMenu && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 10 }}
-                          className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden z-50"
-                        >
-                          <div className="p-3 border-b border-stone-100">
-                            <p className="font-semibold text-stone-900">{user?.name}</p>
-                            <p className="text-xs text-stone-500">{user?.email}</p>
-                          </div>
-                          <div className="p-1">
-                            <Link
-                              to="/profile"
-                              onClick={() => setShowUserMenu(false)}
-                              className="flex items-center gap-2 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded-lg"
-                            >
-                              <User className="w-4 h-4" />
-                              Profile
-                            </Link>
-                            <Link
-                              to="/settings"
-                              onClick={() => setShowUserMenu(false)}
-                              className="flex items-center gap-2 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 rounded-lg"
-                            >
-                              <Settings className="w-4 h-4" />
-                              Settings
-                            </Link>
-                            <button
-                              onClick={handleLogout}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
-                            >
-                              <LogOut className="w-4 h-4" />
-                              Sign Out
-                            </button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </>
-              ) : (
+            <div className="hidden md:flex items-center space-x-1">
+              {navigation.map((item) => (
                 <Link
-                  to="/auth"
-                  className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
+                  key={item.name}
+                  to={item.href}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                    location.pathname === item.href
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
                 >
-                  Sign In
+                  <item.icon className="w-4 h-4" />
+                  {item.name}
+                  {item.badge && (
+                    <span className="bg-amber-400 text-amber-900 text-xs px-1.5 py-0.5 rounded-full">
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+
+            {/* Right side */}
+            <div className="flex items-center gap-2">
+              {/* Notifications */}
+              <Link
+                to="/notifications"
+                className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 bg-red-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </Link>
+
+              {/* Premium Badge */}
+              {user?.isPremium && (
+                <Link
+                  to="/premium"
+                  className="hidden sm:flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-amber-400 to-amber-500 text-amber-900 rounded-lg text-sm font-medium"
+                >
+                  <Crown className="w-4 h-4" />
+                  Premium
                 </Link>
               )}
 
-              {/* Mobile Menu Button */}
+              {/* User Menu */}
+              <div className="relative group">
+                <button className="flex items-center gap-2 p-1 pr-3 rounded-lg hover:bg-gray-100">
+                  <img
+                    src={user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`}
+                    alt={user?.name}
+                    className="w-8 h-8 rounded-full"
+                  />
+                  <span className="text-sm font-medium text-gray-700 hidden sm:block">{user?.name}</span>
+                </button>
+
+                {/* Dropdown */}
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                  <div className="py-1">
+                    <Link to="/profile" className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                      <User className="w-4 h-4" />
+                      Profile
+                    </Link>
+                    <Link to="/settings" className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                      Settings
+                    </Link>
+                    {!user?.isPremium && (
+                      <Link to="/premium" className="flex items-center gap-2 px-4 py-2 text-sm text-amber-600 hover:bg-amber-50">
+                        <Crown className="w-4 h-4" />
+                        Upgrade to Premium
+                      </Link>
+                    )}
+                    <hr className="my-1" />
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile menu button */}
               <button
-                onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="md:hidden p-2 hover:bg-stone-100 rounded-lg transition-colors"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
               >
-                {showMobileMenu ? (
-                  <X className="w-5 h-5 text-stone-600" />
-                ) : (
-                  <Menu className="w-5 h-5 text-stone-600" />
-                )}
+                {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
           </div>
-
-          {/* Mobile Navigation */}
-          <AnimatePresence>
-            {showMobileMenu && (
-              <motion.nav
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="md:hidden mt-4 overflow-hidden"
-              >
-                <div className="flex flex-col gap-1 py-2">
-                  {navItems.map((item) => {
-                    if (item.auth && !isAuthenticated) return null;
-                    const isActive = location.pathname === item.to;
-                    return (
-                      <Link
-                        key={item.to}
-                        to={item.to}
-                        onClick={() => setShowMobileMenu(false)}
-                        className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                          isActive
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'text-stone-600 hover:bg-stone-100'
-                        }`}
-                      >
-                        <item.icon className="w-4 h-4" />
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </motion.nav>
-            )}
-          </AnimatePresence>
         </div>
-      </header>
+
+        {/* Mobile Navigation */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden border-t border-gray-200">
+            <div className="px-2 pt-2 pb-3 space-y-1">
+              {navigation.map((item) => (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-base font-medium ${
+                    location.pathname === item.href
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <item.icon className="w-5 h-5" />
+                  {item.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </nav>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-[calc(100vh-200px)]">
         <Outlet />
       </main>
 
       {/* Footer */}
-      <footer className="mt-20 py-12 border-t border-stone-200">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <div className="flex items-center justify-center gap-6 mb-4">
-            <Link to="/about" className="text-sm text-stone-500 hover:text-stone-700">About</Link>
-            <Link to="/privacy" className="text-sm text-stone-500 hover:text-stone-700">Privacy</Link>
-            <Link to="/terms" className="text-sm text-stone-500 hover:text-stone-700">Terms</Link>
-            <Link to="/contact" className="text-sm text-stone-500 hover:text-stone-700">Contact</Link>
-          </div>
-          <p className="text-stone-400 text-sm">
-            Powered by Gemini AI • Nutrition data is approximate
-          </p>
-          <p className="text-stone-300 text-xs mt-2">
-            © {new Date().getFullYear()} NutriGuide. All rights reserved.
-          </p>
-        </div>
-      </footer>
-
-      {/* Click outside to close menus */}
-      {(showUserMenu || showMobileMenu) && (
-        <div 
-          className="fixed inset-0 z-40" 
-          onClick={() => {
-            setShowUserMenu(false);
-            setShowMobileMenu(false);
-          }}
-        />
-      )}
+      <Footer />
     </div>
   );
 }

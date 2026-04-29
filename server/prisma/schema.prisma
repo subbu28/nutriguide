@@ -8,78 +8,94 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(cuid())
-  email           String   @unique
-  password        String
-  name            String
-  avatar          String?
-  isPremium       Boolean  @default(false)
+  id               String  @id @default(cuid())
+  email            String  @unique
+  password         String
+  name             String
+  avatar           String?
+  bio              String?
+  isPremium        Boolean @default(false)
   stripeCustomerId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
 
-  favorites       Favorite[]
-  votes           Vote[]
-  messages        Message[]
+  // Email verification
+  isEmailVerified   Boolean   @default(false)
+  emailVerifyToken  String?   @unique
+  emailVerifyExpiry DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  favorites         Favorite[]
+  votes             Vote[]
+  messages          Message[]
   familyMemberships FamilyMember[]
-  ownedFamilies   Family[]       @relation("FamilyOwner")
-  notifications   Notification[]
-  mealSuggestions MealSuggestion[]
-  settings        UserSettings?
-  mealPlans       MealPlan[]
+  ownedFamilies     Family[]         @relation("FamilyOwner")
+  notifications     Notification[]
+  mealSuggestions   MealSuggestion[]
+  settings          UserSettings?
+  mealPlans         MealPlan[]
+
+  // New relations
+  recipes         Recipe[]
+  reviews         Review[]
+  reviewHelpful   ReviewHelpful[]
+  collections     Collection[]
+  shoppingLists   ShoppingList[]
+  mealLogs        MealLog[]
+  aiConversations AIConversation[]
 }
 
 model UserSettings {
-  id                    String   @id @default(cuid())
-  userId                String   @unique
-  
+  id     String @id @default(cuid())
+  userId String @unique
+
   // Dietary Preferences
-  dietaryPreferences    String[] @default([])
-  allergies             String[] @default([])
-  calorieGoal           Int?
-  proteinGoal           Int?
-  
+  dietaryPreferences String[] @default([])
+  allergies          String[] @default([])
+  calorieGoal        Int?
+  proteinGoal        Int?
+
   // Notification Settings
-  emailNotifications    Boolean  @default(true)
-  pushNotifications     Boolean  @default(true)
-  pollReminders         Boolean  @default(true)
-  familyUpdates         Boolean  @default(true)
-  
+  emailNotifications Boolean @default(true)
+  pushNotifications  Boolean @default(true)
+  pollReminders      Boolean @default(true)
+  familyUpdates      Boolean @default(true)
+
   // App Preferences
-  theme                 String   @default("system")
-  language              String   @default("en")
-  measurementUnit       String   @default("metric")
-  defaultCuisine        String?
-  
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme           String  @default("system")
+  language        String  @default("en")
+  measurementUnit String  @default("metric")
+  defaultCuisine  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Family {
-  id          String   @id @default(cuid())
-  name        String
-  inviteCode  String   @unique @default(cuid())
-  ownerId     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  name       String
+  inviteCode String   @unique @default(cuid())
+  ownerId    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  owner       User     @relation("FamilyOwner", fields: [ownerId], references: [id])
-  members     FamilyMember[]
-  mealPolls   MealPoll[]
-  messages    Message[]
+  owner     User           @relation("FamilyOwner", fields: [ownerId], references: [id])
+  members   FamilyMember[]
+  mealPolls MealPoll[]
+  messages  Message[]
 }
 
 model FamilyMember {
-  id        String   @id @default(cuid())
-  userId    String
-  familyId  String
-  role      FamilyRole @default(MEMBER)
-  joinedAt  DateTime @default(now())
+  id       String     @id @default(cuid())
+  userId   String
+  familyId String
+  role     FamilyRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  family    Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
   @@unique([userId, familyId])
 }
@@ -91,30 +107,30 @@ enum FamilyRole {
 }
 
 model Favorite {
-  id          String   @id @default(cuid())
-  userId      String
-  mealId      String
-  mealName    String
-  mealData    Json
-  category    String
-  dietType    String
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  mealId    String
+  mealName  String
+  mealData  Json
+  category  String
+  dietType  String
+  createdAt DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, mealId])
 }
 
 model MealPoll {
-  id          String   @id @default(cuid())
-  familyId    String
-  category    MealCategory
-  date        DateTime @db.Date
-  status      PollStatus @default(ACTIVE)
-  createdAt   DateTime @default(now())
-  closesAt    DateTime
+  id        String       @id @default(cuid())
+  familyId  String
+  category  MealCategory
+  date      DateTime     @db.Date
+  status    PollStatus   @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  closesAt  DateTime
 
-  family      Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  family      Family           @relation(fields: [familyId], references: [id], onDelete: Cascade)
   suggestions MealSuggestion[]
   votes       Vote[]
 
@@ -135,17 +151,17 @@ enum PollStatus {
 }
 
 model MealSuggestion {
-  id          String   @id @default(cuid())
-  pollId      String
-  userId      String
-  mealId      String
-  mealName    String
-  mealData    Json
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  pollId    String
+  userId    String
+  mealId    String
+  mealName  String
+  mealData  Json
+  createdAt DateTime @default(now())
 
-  poll        MealPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  votes       Vote[]
+  poll  MealPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  votes Vote[]
 }
 
 model Vote {
@@ -155,24 +171,24 @@ model Vote {
   suggestionId String
   createdAt    DateTime @default(now())
 
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  poll         MealPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  suggestion   MealSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  poll       MealPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  suggestion MealSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, pollId])
 }
 
 model Message {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   familyId  String
   userId    String
   content   String
   type      MessageType @default(TEXT)
   metadata  Json?
-  createdAt DateTime @default(now())
+  createdAt DateTime    @default(now())
 
-  family    Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum MessageType {
@@ -184,16 +200,16 @@ enum MessageType {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
+  id        String           @id @default(cuid())
   userId    String
   title     String
   body      String
   type      NotificationType
   data      Json?
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum NotificationType {
@@ -206,14 +222,14 @@ enum NotificationType {
 }
 
 model Payment {
-  id              String   @id @default(cuid())
-  stripePaymentId String   @unique
+  id              String        @id @default(cuid())
+  stripePaymentId String        @unique
   userId          String
   amount          Int
-  currency        String   @default("usd")
+  currency        String        @default("usd")
   status          PaymentStatus
   type            PaymentType
-  createdAt       DateTime @default(now())
+  createdAt       DateTime      @default(now())
 }
 
 enum PaymentStatus {
@@ -229,16 +245,16 @@ enum PaymentType {
 }
 
 model Subscription {
-  id                   String   @id @default(cuid())
-  userId               String   @unique
-  stripeSubscriptionId String   @unique
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  stripeSubscriptionId String             @unique
   stripePriceId        String
   status               SubscriptionStatus
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
-  cancelAtPeriodEnd    Boolean  @default(false)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 }
 
 enum SubscriptionStatus {
@@ -249,37 +265,90 @@ enum SubscriptionStatus {
   TRIALING
 }
 
+// Coupons
+model Coupon {
+  id             String       @id @default(cuid())
+  code           String       @unique
+  description    String?
+  discountType   DiscountType
+  discountValue  Int // Percentage (0-100) or cents for fixed amount
+  maxUses        Int? // Null = unlimited
+  usedCount      Int          @default(0)
+  minPurchase    Int? // Minimum purchase amount in cents
+  validFrom      DateTime     @default(now())
+  validUntil     DateTime?
+  isActive       Boolean      @default(true)
+  stripeCouponId String?      @unique
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  redemptions CouponRedemption[]
+}
+
+model CouponRedemption {
+  id              String   @id @default(cuid())
+  couponId        String
+  userId          String
+  orderId         String? // Payment or subscription ID
+  discountApplied Int // Amount discounted in cents
+  redeemedAt      DateTime @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, userId]) // One redemption per user per coupon
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+// Payment Methods (saved cards)
+model PaymentMethod {
+  id                    String   @id @default(cuid())
+  userId                String
+  stripePaymentMethodId String   @unique
+  brand                 String // visa, mastercard, etc.
+  last4                 String
+  expMonth              Int
+  expYear               Int
+  isDefault             Boolean  @default(false)
+  createdAt             DateTime @default(now())
+
+  @@index([userId])
+}
+
 // Meal Planning
 model MealPlan {
-  id              String   @id @default(cuid())
-  userId          String
-  name            String
-  startDate       DateTime @db.Date
-  endDate         DateTime @db.Date
-  targetCalories  Int?
-  diet            String?
+  id                 String   @id @default(cuid())
+  userId             String
+  name               String
+  startDate          DateTime @db.Date
+  endDate            DateTime @db.Date
+  targetCalories     Int?
+  diet               String?
   excludeIngredients String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  meals           PlannedMeal[]
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meals PlannedMeal[]
 }
 
 model PlannedMeal {
-  id              String   @id @default(cuid())
-  mealPlanId      String
-  date            DateTime @db.Date
-  slot            MealSlot
-  recipeId        String
-  recipeName      String
-  recipeImage     String?
-  recipeData      Json
-  servings        Int      @default(1)
-  completed       Boolean  @default(false)
-  createdAt       DateTime @default(now())
+  id          String   @id @default(cuid())
+  mealPlanId  String
+  date        DateTime @db.Date
+  slot        MealSlot
+  recipeId    String
+  recipeName  String
+  recipeImage String?
+  recipeData  Json
+  servings    Int      @default(1)
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
 
-  mealPlan        MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
 
   @@unique([mealPlanId, date, slot])
 }
@@ -289,6 +358,230 @@ enum MealSlot {
   LUNCH
   DINNER
   SNACK
+}
+
+// Recipe System
+model Recipe {
+  id           String       @id @default(cuid())
+  authorId     String
+  title        String
+  description  String?
+  instructions String
+  prepTime     Int // minutes
+  cookTime     Int // minutes
+  servings     Int
+  difficulty   Difficulty   @default(MEDIUM)
+  privacy      PrivacyLevel @default(PUBLIC)
+  images       String[]
+  videoUrl     String?
+  tags         String[]
+  cuisine      String?
+
+  // Nutrition (per serving)
+  calories Float?
+  protein  Float?
+  carbs    Float?
+  fat      Float?
+  fiber    Float?
+
+  // Engagement
+  viewCount Int @default(0)
+  likeCount Int @default(0)
+  saveCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author            User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  ingredients       RecipeIngredient[]
+  reviews           Review[]
+  collectionRecipes CollectionRecipe[]
+  mealLogs          MealLog[]
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum PrivacyLevel {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+model RecipeIngredient {
+  id       String  @id @default(cuid())
+  recipeId String
+  name     String
+  amount   Float
+  unit     String
+  optional Boolean @default(false)
+  notes    String?
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  recipeId  String
+  userId    String
+  rating    Int // 1-5
+  comment   String?
+  images    String[]
+  helpful   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recipe       Recipe          @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  helpfulMarks ReviewHelpful[]
+
+  @@unique([recipeId, userId])
+}
+
+model ReviewHelpful {
+  id        String   @id @default(cuid())
+  reviewId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  User   User   @relation(fields: [userId], references: [id])
+
+  @@unique([reviewId, userId])
+}
+
+// Social Features
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+}
+
+model Collection {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  recipes CollectionRecipe[]
+  User    User               @relation(fields: [userId], references: [id])
+}
+
+model CollectionRecipe {
+  id           String   @id @default(cuid())
+  collectionId String
+  recipeId     String
+  addedAt      DateTime @default(now())
+  notes        String?
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  recipe     Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, recipeId])
+}
+
+// Shopping List
+model ShoppingList {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  isTemplate Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  items ShoppingItem[]
+  User  User           @relation(fields: [userId], references: [id])
+}
+
+model ShoppingItem {
+  id        String   @id @default(cuid())
+  listId    String
+  name      String
+  amount    Float?
+  unit      String?
+  category  String // Produce, Dairy, etc.
+  checked   Boolean  @default(false)
+  notes     String?
+  createdAt DateTime @default(now())
+
+  list ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+}
+
+// Meal History / Logging
+model MealLog {
+  id         String   @id @default(cuid())
+  userId     String
+  recipeId   String?
+  mealName   String
+  mealData   Json
+  servings   Float    @default(1)
+  mealSlot   MealSlot
+  consumedAt DateTime
+  calories   Float?
+  protein    Float?
+  carbs      Float?
+  fat        Float?
+  mood       String? // How did you feel?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe Recipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+}
+
+// AI Conversation History
+model AIConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  messages  Json // Array of {role, content, timestamp}
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  User      User     @relation(fields: [userId], references: [id])
+}
+
+// Recipe Likes (separate from saves)
+model RecipeLike {
+  id        String   @id @default(cuid())
+  recipeId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([recipeId, userId])
+}
+
+// Activity Log for feeds
+model ActivityLog {
+  id         String       @id @default(cuid())
+  userId     String
+  type       ActivityType
+  entityType String // recipe, review, collection, etc.
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}
+
+enum ActivityType {
+  RECIPE_CREATED
+  RECIPE_LIKED
+  RECIPE_SAVED
+  REVIEW_CREATED
+  COLLECTION_CREATED
+  FOLLOWED_USER
+  MEAL_PLANNED
+  MEAL_LOGGED
 }
 
 generator erd {

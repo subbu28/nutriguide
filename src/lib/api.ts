@@ -1,546 +1,543 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+import { User, UserSettings, Meal, Recipe, Review, Family, MealPoll, Message, Notification, MealPlan, ShoppingList, MealLog, Collection, AIConversation } from '../types/index.js';
 
-interface RequestOptions extends RequestInit {
-  params?: Record<string, string>;
-}
+const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3001/api`;
 
 class ApiClient {
-  private baseUrl: string;
   private token: string | null = null;
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
-    this.token = localStorage.getItem('token');
-  }
 
   setToken(token: string | null) {
     this.token = token;
-    if (token) {
-      localStorage.setItem('token', token);
-    } else {
-      localStorage.removeItem('token');
-    }
   }
 
-  private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { params, ...fetchOptions } = options;
-    
-    let url = `${this.baseUrl}${endpoint}`;
-    if (params) {
-      const searchParams = new URLSearchParams(params);
-      url += `?${searchParams.toString()}`;
-    }
-
-    const headers: HeadersInit = {
+  private async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const url = `${API_URL}${path}`;
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...options.headers as Record<string, string>,
     };
 
     if (this.token) {
-      (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`;
+      headers['Authorization'] = `Bearer ${this.token}`;
     }
 
     const response = await fetch(url, {
-      ...fetchOptions,
+      ...options,
       headers,
       credentials: 'include',
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(error.error || 'Request failed');
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
     }
 
     return response.json();
   }
 
   // Auth
-  async register(data: { email: string; password: string; name: string }) {
-    const result = await this.request<{ user: any; token: string }>('/auth/register', {
+  async register(email: string, password: string, name: string) {
+    return this.fetch<{ user: User; token: string }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ email, password, name }),
     });
-    this.setToken(result.token);
-    return result;
   }
 
-  async login(data: { email: string; password: string }) {
-    const result = await this.request<{ user: any; token: string }>('/auth/login', {
+  async login(email: string, password: string) {
+    return this.fetch<{ user: User; token: string }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ email, password }),
     });
-    this.setToken(result.token);
-    return result;
-  }
-
-  async logout() {
-    await this.request('/auth/logout', { method: 'POST' });
-    this.setToken(null);
   }
 
   async getMe() {
-    return this.request<{ user: any }>('/auth/me');
+    return this.fetch<User>('/auth/me');
   }
 
-  async updateProfile(data: { name?: string; avatar?: string }) {
-    return this.request<{ user: any }>('/auth/profile', {
+  async logout() {
+    return this.fetch('/auth/logout', { method: 'POST' });
+  }
+
+  async updateProfile(data: Partial<User>) {
+    return this.fetch<User>('/auth/profile', {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
+  async changePassword(currentPassword: string, newPassword: string) {
+    return this.fetch('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  }
+
+  // User Settings
+  async getSettings() {
+    return this.fetch<UserSettings>('/user/settings');
+  }
+
+  async updateSettings(data: Partial<UserSettings>) {
+    return this.fetch<UserSettings>('/user/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getUserStats() {
+    return this.fetch<{
+      favorites: number;
+      recipes: number;
+      reviews: number;
+      mealPlans: number;
+      mealLogs: number;
+      families: number;
+    }>('/user/stats');
+  }
+
   // Meals
-  async getMeals(category: string, dietType: string, cuisine: string = 'All') {
-    return this.request<{ meals: any[]; cuisine?: string }>('/meals', {
-      params: { category, dietType, cuisine },
-    });
+  async getMeals(params?: { category?: string; diet?: string; cuisine?: string; search?: string; page?: number; limit?: number }) {
+    const query = new URLSearchParams();
+    if (params?.category) query.set('category', params.category);
+    if (params?.diet) query.set('diet', params.diet);
+    if (params?.cuisine) query.set('cuisine', params.cuisine);
+    if (params?.search) query.set('search', params.search);
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+
+    return this.fetch<{ meals: Meal[]; pagination: any }>(`/meals?${query}`);
   }
 
-  async searchMeals(query: string, dietType: string) {
-    return this.request<{ meals: any[] }>('/meals/search', {
-      params: { q: query, dietType },
-    });
+  async getRandomMeals(count = 5) {
+    return this.fetch<{ meals: Meal[] }>(`/meals/random?count=${count}`);
   }
 
-  async getRandomMeals(count: number = 5) {
-    return this.request<{ meals: any[] }>('/meals/random', {
-      params: { count: count.toString() },
-    });
+  async getMeal(id: string) {
+    return this.fetch<{ meal: Meal }>(`/meals/${id}`);
   }
 
   async getCuisines() {
-    return this.request<{ cuisines: string[] }>('/meals/cuisines');
+    return this.fetch<{ cuisines: string[] }>('/meals/cuisines');
   }
 
-  async getMealsByCuisine(cuisine: string) {
-    return this.request<{ meals: any[]; area: string }>(`/meals/cuisine/${cuisine}`);
-  }
-
-  // Favorites
-  async getFavorites(filters?: { category?: string; dietType?: string }) {
-    return this.request<{ favorites: any[] }>('/favorites', {
-      params: filters as Record<string, string>,
+  async getMealRecommendations(params: { preferences?: string; dietaryRestrictions?: string[]; calories?: number; mealType?: string }) {
+    return this.fetch('/meals/recommendations', {
+      method: 'POST',
+      body: JSON.stringify(params),
     });
   }
 
-  async addFavorite(data: { mealId: string; mealName: string; mealData: any; category: string; dietType: string }) {
-    return this.request<{ favorite: any }>('/favorites', {
+  // Favorites
+  async getFavorites(params?: { category?: string; page?: number; limit?: number }) {
+    const query = new URLSearchParams();
+    if (params?.category) query.set('category', params.category);
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+
+    return this.fetch<{ favorites: any[]; pagination: any }>(`/favorites?${query}`);
+  }
+
+  async addFavorite(data: { mealId: string; mealName: string; mealData: any; category?: string; dietType?: string }) {
+    return this.fetch('/favorites', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async removeFavorite(mealId: string) {
-    return this.request<{ message: string }>(`/favorites/${mealId}`, {
-      method: 'DELETE',
-    });
+    return this.fetch(`/favorites/${mealId}`, { method: 'DELETE' });
   }
 
   async checkFavorite(mealId: string) {
-    return this.request<{ isFavorite: boolean }>(`/favorites/check/${mealId}`);
+    return this.fetch<{ isFavorited: boolean }>(`/favorites/check/${mealId}`);
   }
 
-  // Family
+  // Recipes
+  async getRecipes(params?: { search?: string; cuisine?: string; difficulty?: string; tags?: string; authorId?: string; page?: number; limit?: number }) {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.cuisine) query.set('cuisine', params.cuisine);
+    if (params?.difficulty) query.set('difficulty', params.difficulty);
+    if (params?.tags) query.set('tags', params.tags);
+    if (params?.authorId) query.set('authorId', params.authorId);
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+
+    return this.fetch<{ recipes: Recipe[]; pagination: any }>(`/recipes?${query}`);
+  }
+
+  async getRecipe(id: string) {
+    return this.fetch<Recipe>(`/recipes/${id}`);
+  }
+
+  async getRecipeDetails(recipeId: string | number, source?: string) {
+    const query = source ? `?source=${source}` : '';
+    return this.fetch<{ recipe: any }>(`/mealplanner/recipe/${recipeId}${query}`);
+  }
+
+  async createRecipe(data: Partial<Recipe>) {
+    return this.fetch<Recipe>('/recipes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRecipe(id: string, data: Partial<Recipe>) {
+    return this.fetch<Recipe>(`/recipes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRecipe(id: string) {
+    return this.fetch(`/recipes/${id}`, { method: 'DELETE' });
+  }
+
+  async likeRecipe(id: string) {
+    return this.fetch<{ liked: boolean }>(`/recipes/${id}/like`, { method: 'POST' });
+  }
+
+  // Reviews
+  async getReviews(recipeId: string, params?: { page?: number; limit?: number }) {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+
+    return this.fetch<{ reviews: Review[]; pagination: any }>(`/reviews/recipe/${recipeId}?${query}`);
+  }
+
+  async createReview(data: { recipeId: string; rating: number; comment?: string; images?: string[] }) {
+    return this.fetch<Review>('/reviews', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async markReviewHelpful(id: string) {
+    return this.fetch<{ marked: boolean }>(`/reviews/${id}/helpful`, { method: 'POST' });
+  }
+
+  // Families
   async getFamilies() {
-    return this.request<{ families: any[] }>('/family');
-  }
-
-  async getFamily(familyId: string) {
-    return this.request<{ family: any; myRole: string }>(`/family/${familyId}`);
+    return this.fetch<{ families: Family[] }>('/family');
   }
 
   async createFamily(name: string) {
-    return this.request<{ family: any }>('/family', {
+    return this.fetch<Family>('/family', {
       method: 'POST',
       body: JSON.stringify({ name }),
     });
   }
 
+  async getFamily(id: string) {
+    return this.fetch<Family>(`/family/${id}`);
+  }
+
   async joinFamily(inviteCode: string) {
-    return this.request<{ message: string; familyId: string }>('/family/join', {
+    return this.fetch('/family/join', {
       method: 'POST',
       body: JSON.stringify({ inviteCode }),
     });
   }
 
-  async leaveFamily(familyId: string) {
-    return this.request<{ message: string }>(`/family/${familyId}/leave`, {
-      method: 'DELETE',
+  async leaveFamily(id: string) {
+    return this.fetch(`/family/${id}/leave`, { method: 'DELETE' });
+  }
+
+  async regenerateInviteCode(id: string) {
+    return this.fetch<{ inviteCode: string }>(`/family/${id}/regenerate-invite`, { method: 'POST' });
+  }
+
+  async addFamilyMember(familyId: string, email: string, role: string = 'MEMBER') {
+    return this.fetch(`/family/${familyId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
     });
   }
 
-  async regenerateInviteCode(familyId: string) {
-    return this.request<{ inviteCode: string }>(`/family/${familyId}/regenerate-invite`, {
+  async removeFamilyMember(familyId: string, userId: string) {
+    return this.fetch(`/family/${familyId}/members/${userId}`, { method: 'DELETE' });
+  }
+
+  async getFamilyMembers(familyId: string) {
+    return this.fetch(`/family/${familyId}/members`);
+  }
+
+  // Chat/Messages
+  async getFamilyMessages(familyId: string, before?: string) {
+    const query = before ? `?before=${before}` : '';
+    return this.fetch(`/chat/family/${familyId}${query}`);
+  }
+
+  async sendFamilyMessage(familyId: string, content: string, type: string = 'TEXT') {
+    return this.fetch(`/chat/family/${familyId}`, {
       method: 'POST',
+      body: JSON.stringify({ content, type }),
     });
   }
 
   // Polls
-  async getFamilyPolls(familyId: string) {
-    return this.request<{ polls: any[] }>(`/polls/family/${familyId}`);
+  async getPolls(familyId: string, status?: string) {
+    const query = status ? `?status=${status}` : '';
+    return this.fetch<{ polls: MealPoll[] }>(`/polls/family/${familyId}${query}`);
+  }
+
+  async getFamilyPolls(familyId: string, status?: string) {
+    return this.getPolls(familyId, status);
   }
 
   async createPoll(data: { familyId: string; category: string; date: string; closesAt: string }) {
-    return this.request<{ poll: any }>('/polls', {
+    return this.fetch<MealPoll>('/polls', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async suggestMeal(pollId: string, data: { mealId: string; mealName: string; mealData: any }) {
-    return this.request<{ suggestion: any }>(`/polls/${pollId}/suggest`, {
+    return this.fetch(`/polls/${pollId}/suggest`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async vote(pollId: string, suggestionId: string) {
-    return this.request<{ vote: any; suggestions: any[] }>(`/polls/${pollId}/vote/${suggestionId}`, {
-      method: 'POST',
-    });
-  }
-
-  async closePoll(pollId: string) {
-    return this.request<{ winner: any; poll: any }>(`/polls/${pollId}/close`, {
-      method: 'POST',
-    });
+    return this.fetch(`/polls/${pollId}/vote/${suggestionId}`, { method: 'POST' });
   }
 
   // Chat
   async getMessages(familyId: string, before?: string) {
-    const params: Record<string, string> = {};
-    if (before) params.before = before;
-    return this.request<{ messages: any[] }>(`/chat/family/${familyId}`, { params });
+    const query = before ? `?before=${before}` : '';
+    return this.fetch<{ messages: Message[] }>(`/chat/family/${familyId}${query}`);
   }
 
-  async sendMessage(familyId: string, content: string, type: string = 'TEXT', metadata?: any) {
-    return this.request<{ message: any }>(`/chat/family/${familyId}`, {
+  async sendMessage(familyId: string, content: string, type = 'TEXT') {
+    return this.fetch<Message>(`/chat/family/${familyId}`, {
       method: 'POST',
-      body: JSON.stringify({ content, type, metadata }),
+      body: JSON.stringify({ content, type }),
     });
   }
 
   async shareMeal(familyId: string, mealId: string, mealName: string, mealData: any, comment?: string) {
-    return this.request<{ message: any }>(`/chat/family/${familyId}/share-meal`, {
+    return this.fetch<Message>(`/chat/family/${familyId}/share-meal`, {
       method: 'POST',
       body: JSON.stringify({ mealId, mealName, mealData, comment }),
     });
   }
 
   // Notifications
-  async getNotifications(unreadOnly: boolean = false) {
-    return this.request<{ notifications: any[] }>('/notifications', {
-      params: { unreadOnly: String(unreadOnly) },
-    });
+  async getNotifications(unreadOnly = false) {
+    return this.fetch<{ notifications: Notification[]; unreadCount: number }>(`/notifications?unreadOnly=${unreadOnly}`);
   }
 
   async getUnreadCount() {
-    return this.request<{ count: number }>('/notifications/unread-count');
+    return this.fetch<{ count: number }>('/notifications/unread-count');
   }
 
-  async markAsRead(notificationId: string) {
-    return this.request<{ message: string }>(`/notifications/${notificationId}/read`, {
-      method: 'PATCH',
-    });
+  async markNotificationRead(id: string) {
+    return this.fetch(`/notifications/${id}/read`, { method: 'PATCH' });
   }
 
-  async markAllAsRead() {
-    return this.request<{ message: string }>('/notifications/read-all', {
-      method: 'PATCH',
-    });
+  async markAllNotificationsRead() {
+    return this.fetch('/notifications/read-all', { method: 'PATCH' });
   }
 
-  // Payments
-  async createCheckoutSession() {
-    return this.request<{ sessionId: string; url: string }>('/payments/create-checkout-session', {
-      method: 'POST',
-    });
-  }
-
-  async getSubscription() {
-    return this.request<{ subscription: any; isPremium: boolean }>('/payments/subscription');
-  }
-
-  async cancelSubscription() {
-    return this.request<{ message: string }>('/payments/cancel-subscription', {
-      method: 'POST',
-    });
-  }
-
-  async getPaymentHistory() {
-    return this.request<{ payments: any[] }>('/payments/history');
-  }
-
-  // Profile
-  async getProfile() {
-    return this.request<{
-      id: string;
-      email: string;
-      name: string;
-      avatar: string | null;
-      isPremium: boolean;
-      createdAt: string;
-      favoritesCount: number;
-      familiesCount: number;
-    }>('/user/profile');
-  }
-
-  async updateUserProfile(data: { name?: string; email?: string; avatar?: string }) {
-    return this.request<{ id: string; email: string; name: string; avatar: string | null }>('/user/profile', {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async changePassword(data: { currentPassword: string; newPassword: string }) {
-    return this.request<{ message: string }>('/user/profile/password', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async deleteAccount() {
-    return this.request<{ message: string }>('/user/profile', {
-      method: 'DELETE',
-    });
-  }
-
-  async getProfileStats() {
-    return this.request<{
-      favorites: number;
-      families: number;
-      votes: number;
-      suggestions: number;
-    }>('/user/profile/stats');
-  }
-
-  // Settings
-  async getSettings() {
-    return this.request<{
-      id: string;
-      dietaryPreferences: string[];
-      allergies: string[];
-      calorieGoal: number | null;
-      proteinGoal: number | null;
-      emailNotifications: boolean;
-      pushNotifications: boolean;
-      pollReminders: boolean;
-      familyUpdates: boolean;
-      theme: string;
-      language: string;
-      measurementUnit: string;
-      defaultCuisine: string | null;
-    }>('/user/settings');
-  }
-
-  async updateSettings(data: {
-    dietaryPreferences?: string[];
-    allergies?: string[];
-    calorieGoal?: number | null;
-    proteinGoal?: number | null;
-    emailNotifications?: boolean;
-    pushNotifications?: boolean;
-    pollReminders?: boolean;
-    familyUpdates?: boolean;
-    theme?: string;
-    language?: string;
-    measurementUnit?: string;
-    defaultCuisine?: string | null;
-  }) {
-    return this.request<any>('/user/settings', {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-  }
-
-  // Meal Planner
+  // Meal Plans
   async getMealPlannerStatus() {
-    return this.request<{
+    return this.fetch<{
       spoonacularEnabled: boolean;
       inHouseEnabled: boolean;
       geminiEnabled: boolean;
       dietOptions: { value: string; label: string }[];
-      intoleranceOptions: string[];
     }>('/mealplanner/status');
+  }
+
+  async getMealPlans() {
+    return this.fetch<{ plans: MealPlan[] }>('/mealplanner/plans');
   }
 
   async generateMealPlan(params: {
     timeFrame: 'day' | 'week';
-    targetCalories?: number;
+    targetCalories: number;
     diet?: string;
     exclude?: string;
-    source?: 'spoonacular' | 'inhouse' | 'auto';
+    source?: string;
   }) {
-    return this.request<{ mealPlan: any; source: string }>('/mealplanner/generate', {
+    return this.fetch<{ mealPlan: any; source: string }>('/mealplanner/generate', {
       method: 'POST',
       body: JSON.stringify(params),
     });
   }
 
-  async regenerateMeal(params: {
-    slot: 'breakfast' | 'lunch' | 'dinner' | 'snack';
-    diet?: string;
-    exclude?: string;
-    excludeMealIds?: string[];
-  }) {
-    return this.request<{ meal: any }>('/mealplanner/regenerate-meal', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    });
-  }
-
-  async getRecipeDetails(recipeId: number | string, source?: string) {
-    const url = source 
-      ? `/mealplanner/recipe/${recipeId}?source=${source}`
-      : `/mealplanner/recipe/${recipeId}`;
-    return this.request<{ recipe: any; source: string }>(url);
-  }
-
-  async getMealPlans() {
-    return this.request<{ mealPlans: any[] }>('/mealplanner/plans');
-  }
-
-  async getMealPlan(id: string) {
-    return this.request<{ mealPlan: any }>(`/mealplanner/plans/${id}`);
-  }
-
-  async getCurrentMealPlan() {
-    return this.request<{ mealPlan: any | null }>('/mealplanner/current');
-  }
-
-  async saveMealPlan(data: {
-    name: string;
-    startDate: string;
-    endDate: string;
-    targetCalories?: number;
-    diet?: string;
-    excludeIngredients?: string;
-    meals: {
-      date: string;
-      slot: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
-      recipeId: string;
-      recipeName: string;
-      recipeImage?: string;
-      recipeData: any;
-      servings?: number;
-    }[];
-  }) {
-    return this.request<{ mealPlan: any }>('/mealplanner/plans', {
+  async saveMealPlan(data: any) {
+    return this.fetch('/mealplanner/plans', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteMealPlan(id: string) {
-    return this.request<{ message: string }>(`/mealplanner/plans/${id}`, {
-      method: 'DELETE',
+  async regenerateMeal(params: {
+    slot: string;
+    diet?: string;
+    exclude?: string;
+    excludeMealIds?: string[];
+  }) {
+    return this.fetch<{ meal: any }>('/mealplanner/regenerate-meal', {
+      method: 'POST',
+      body: JSON.stringify(params),
     });
   }
 
-  async updatePlannedMeal(mealId: string, data: { servings?: number; completed?: boolean }) {
-    return this.request<{ meal: any }>(`/mealplanner/meals/${mealId}`, {
+  async getMealPlan(id: string) {
+    return this.fetch<MealPlan>(`/mealplanner/plans/${id}`);
+  }
+
+  async deleteMealPlan(id: string) {
+    return this.fetch(`/mealplanner/plans/${id}`, { method: 'DELETE' });
+  }
+
+  async addMealToPlan(planId: string, data: Partial<MealPlan['meals'][0]>) {
+    return this.fetch(`/mealplanner/plans/${planId}/meals`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Shopping Lists
+  async getShoppingLists() {
+    return this.fetch<{ lists: ShoppingList[] }>('/shopping-lists');
+  }
+
+  async getShoppingList(id: string) {
+    return this.fetch<ShoppingList>(`/shopping-lists/${id}`);
+  }
+
+  async createShoppingList(data: { name: string; isTemplate?: boolean; items?: any[] }) {
+    return this.fetch<ShoppingList>('/shopping-lists', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteShoppingList(id: string) {
+    return this.fetch(`/shopping-lists/${id}`, { method: 'DELETE' });
+  }
+
+  async addShoppingItem(listId: string, data: Partial<ShoppingList['items'][0]>) {
+    return this.fetch(`/shopping-lists/${listId}/items`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateShoppingItem(listId: string, itemId: string, data: Partial<ShoppingList['items'][0]>) {
+    return this.fetch(`/shopping-lists/${listId}/items/${itemId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
-  async deletePlannedMeal(mealId: string) {
-    return this.request<{ message: string }>(`/mealplanner/meals/${mealId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  // Reviews
-  async getReviews(mealId: string, sort: string = 'newest', page: number = 1) {
-    return this.request<{
-      reviews: any[];
-      summary: {
-        averageRating: number;
-        totalReviews: number;
-        distribution: {
-          5: number;
-          4: number;
-          3: number;
-          2: number;
-          1: number;
-        };
-      };
-      hasMore: boolean;
-      page: number;
-    }>(`/reviews/meal/${mealId}`, {
-      params: { sort, page: page.toString() },
-    });
-  }
-
-  async submitReview(mealId: string, rating: number, text: string) {
-    return this.request<{
-      review: any;
-      summary: {
-        averageRating: number;
-        totalReviews: number;
-        distribution: {
-          5: number;
-          4: number;
-          3: number;
-          2: number;
-          1: number;
-        };
-      };
-    }>('/reviews', {
-      method: 'POST',
-      body: JSON.stringify({ mealId, rating, text }),
-    });
-  }
-
-  async markReviewHelpful(reviewId: string) {
-    return this.request<{
-      helpful: number;
-      isHelpful: boolean;
-    }>(`/reviews/${reviewId}/helpful`, {
-      method: 'POST',
-    });
-  }
-
-  async deleteReview(reviewId: string) {
-    return this.request<{ message: string }>(`/reviews/${reviewId}`, {
-      method: 'DELETE',
-    });
-  }
-
   // Meal History
-  async getMealHistory(startDate: string, endDate: string) {
-    return this.request<{ history: any[] }>('/meal-history', {
-      params: { startDate, endDate },
-    });
+  async getMealLogs(params?: { startDate?: string; endDate?: string }) {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.set('startDate', params.startDate);
+    if (params?.endDate) query.set('endDate', params.endDate);
+
+    return this.fetch<{ logs: MealLog[] }>(`/meal-history?${query}`);
   }
 
-  async logMeal(data: {
-    mealId: string;
-    mealData: any;
-    date: string;
-    mealType: string;
-    portions: number;
-    totalCalories: number;
-    totalProtein: number;
-    notes?: string;
-  }) {
-    return this.request<{ log: any }>('/meal-history/log', {
+  async getNutritionStats(days = 7) {
+    return this.fetch(`/meal-history/stats?days=${days}`);
+  }
+
+  async logMeal(data: Partial<MealLog>) {
+    return this.fetch<MealLog>('/meal-history/log', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteMealLog(logId: string) {
-    return this.request<{ message: string }>(`/meal-history/log/${logId}`, {
-      method: 'DELETE',
+  // AI
+  async chatWithAI(message: string, conversationId?: string) {
+    return this.fetch<{ response: string; conversationId: string }>('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, conversationId }),
     });
   }
 
-  async getMealStats(period: 'week' | 'month' | 'year') {
-    return this.request<any>('/meal-history/stats', {
-      params: { period },
+  async getAIConversations() {
+    return this.fetch<{ conversations: AIConversation[] }>('/ai/conversations');
+  }
+
+  async generateMealPlanWithAI(params: { days?: number; calorieTarget?: number; dietaryRestrictions?: string[] }) {
+    return this.fetch('/ai/generate-meal-plan', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async generateRecipeFromIngredients(ingredients: string[]) {
+    return this.fetch('/ai/generate-recipe', {
+      method: 'POST',
+      body: JSON.stringify({ ingredients }),
+    });
+  }
+
+  // Social
+  async getUserProfile(id: string) {
+    return this.fetch(`/social/users/${id}`);
+  }
+
+  async followUser(userId: string) {
+    return this.fetch(`/social/follow/${userId}`, { method: 'POST' });
+  }
+
+  async unfollowUser(userId: string) {
+    return this.fetch(`/social/follow/${userId}`, { method: 'DELETE' });
+  }
+
+  async getFeed() {
+    return this.fetch('/social/feed');
+  }
+
+  async getCollections() {
+    return this.fetch<{ collections: Collection[] }>('/social/collections');
+  }
+
+  async createCollection(data: { name: string; description?: string; isPublic?: boolean }) {
+    return this.fetch<Collection>('/social/collections', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async addToCollection(collectionId: string, recipeId: string) {
+    return this.fetch(`/social/collections/${collectionId}/recipes`, {
+      method: 'POST',
+      body: JSON.stringify({ recipeId }),
+    });
+  }
+
+  // Premium
+  async createCheckoutSession(data: { successUrl: string; cancelUrl: string; couponCode?: string }) {
+    return this.fetch('/payments/create-checkout-session', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSubscription() {
+    return this.fetch('/payments/subscription');
+  }
+
+  async cancelSubscription() {
+    return this.fetch('/payments/cancel-subscription', { method: 'POST' });
+  }
+
+  async validateCoupon(code: string) {
+    return this.fetch('/coupons/validate', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
     });
   }
 }
 
-export const api = new ApiClient(API_BASE);
+export const api = new ApiClient();

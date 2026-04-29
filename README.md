@@ -247,4 +247,29 @@ Contributions are welcome! Please read our contributing guidelines before submit
 
 ---
 
-Built with ❤️ using Gemini AI
+
+
+
+✅ How to Improve Deliverability
+For Production (Custom Domain)
+When you deploy and use your own domain (ynutriguide.space):
+
+Verify Domain in Resend
+Add SPF, DKIM, and DMARC records
+This authenticates your emails
+Warm Up Your Domain
+Start with low volume
+Gradually increase sending
+Builds sender reputation
+Best Practices
+Include unsubscribe link
+Add physical address in footer
+Avoid spam trigger words
+Keep good text-to-image ratio
+For Now (Testing)
+Tell users to:
+
+Check spam folder
+Mark email as "Not Spam"
+Add sender to contacts
+This trains their email filter

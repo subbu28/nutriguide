@@ -1,78 +1,119 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { api } from '../lib/api';
-import { wsClient } from '../lib/websocket';
-import type { User } from '../types';
+import { User } from '../types/index.js';
+import { api } from '../lib/api.js';
 
 interface AuthState {
   user: User | null;
+  token: string | null;
   isLoading: boolean;
+  error: string | null;
   isAuthenticated: boolean;
-  
+
+  // Actions
+  setUser: (user: User | null) => void;
+  setToken: (token: string | null) => void;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
-  checkAuth: () => Promise<void>;
-  updateProfile: (data: { name?: string; avatar?: string }) => Promise<void>;
+  fetchUser: () => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<void>;
+  clearError: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      isLoading: true,
+      token: null,
+      isLoading: false,
+      error: null,
       isAuthenticated: false,
 
+      setUser: (user) => set({ user, isAuthenticated: !!user }),
+      setToken: (token) => {
+        set({ token, isAuthenticated: !!token });
+        api.setToken(token);
+      },
+
       login: async (email, password) => {
-        const { user, token } = await api.login({ email, password });
-        set({ user, isAuthenticated: true });
-        
-        // Connect WebSocket after login
-        const families = await api.getFamilies();
-        wsClient.connect(user.id, families.families.map((f: any) => f.id));
+        set({ isLoading: true, error: null });
+        try {
+          const response = await api.login(email, password);
+          set({ 
+            user: response.user, 
+            token: response.token, 
+            isLoading: false,
+            isAuthenticated: true 
+          });
+          api.setToken(response.token);
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
       },
 
       register: async (email, password, name) => {
-        const { user } = await api.register({ email, password, name });
-        set({ user, isAuthenticated: true });
-        wsClient.connect(user.id, []);
+        set({ isLoading: true, error: null });
+        try {
+          const response = await api.register(email, password, name);
+          set({ 
+            user: response.user, 
+            token: response.token, 
+            isLoading: false,
+            isAuthenticated: true 
+          });
+          api.setToken(response.token);
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
       },
 
       logout: async () => {
         try {
           await api.logout();
-        } catch {
-          // Ignore API errors during logout - still clear local state
+        } finally {
+          set({ user: null, token: null, isAuthenticated: false });
+          api.setToken(null);
         }
-        wsClient.disconnect();
-        // Clear persisted storage
-        localStorage.removeItem('auth-storage');
-        localStorage.removeItem('token');
-        set({ user: null, isAuthenticated: false, isLoading: false });
       },
 
-      checkAuth: async () => {
+      fetchUser: async () => {
+        const token = get().token;
+        if (!token) {
+          set({ isLoading: false, isAuthenticated: false });
+          return;
+        }
+
+        api.setToken(token);
+        set({ isLoading: true });
+        
         try {
-          set({ isLoading: true });
-          const { user } = await api.getMe();
-          set({ user, isAuthenticated: true, isLoading: false });
-          
-          // Connect WebSocket
-          const families = await api.getFamilies();
-          wsClient.connect(user.id, families.families.map((f: any) => f.id));
-        } catch {
-          set({ user: null, isAuthenticated: false, isLoading: false });
+          const user = await api.getMe();
+          set({ user, isLoading: false, isAuthenticated: true });
+        } catch (error) {
+          set({ user: null, token: null, isLoading: false, isAuthenticated: false });
+          api.setToken(null);
         }
       },
 
       updateProfile: async (data) => {
-        const { user } = await api.updateProfile(data);
-        set({ user });
+        set({ isLoading: true, error: null });
+        try {
+          const user = await api.updateProfile(data);
+          set({ user: { ...get().user!, ...user }, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
       },
+
+      clearError: () => set({ error: null }),
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      partialize: (state) => ({ token: state.token, isAuthenticated: !!state.token }),
     }
   )
 );

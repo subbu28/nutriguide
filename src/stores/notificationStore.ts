@@ -1,17 +1,17 @@
 import { create } from 'zustand';
-import { api } from '../lib/api';
-import type { Notification } from '../types';
+import { api } from '../lib/api.js';
+import { Notification } from '../types/index.js';
 
 interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
   isLoading: boolean;
 
-  fetchNotifications: () => Promise<void>;
+  fetchNotifications: (unreadOnly?: boolean) => Promise<void>;
   fetchUnreadCount: () => Promise<void>;
-  markAsRead: (notificationId: string) => Promise<void>;
+  markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
-  addNotification: (notification: Notification) => void;
+  deleteNotification: (id: string) => Promise<void>;
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
@@ -19,48 +19,61 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   unreadCount: 0,
   isLoading: false,
 
-  fetchNotifications: async () => {
+  fetchNotifications: async (unreadOnly = false) => {
     set({ isLoading: true });
     try {
-      const { notifications } = await api.getNotifications();
-      set({ notifications, isLoading: false });
+      const response = await api.getNotifications(unreadOnly);
+      set({ notifications: response.notifications, unreadCount: response.unreadCount, isLoading: false });
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
       set({ isLoading: false });
     }
   },
 
   fetchUnreadCount: async () => {
     try {
-      const { count } = await api.getUnreadCount();
-      set({ unreadCount: count });
+      const response = await api.getUnreadCount();
+      set({ unreadCount: response.count });
     } catch (error) {
       console.error('Failed to fetch unread count:', error);
     }
   },
 
-  markAsRead: async (notificationId) => {
-    await api.markAsRead(notificationId);
-    set({
-      notifications: get().notifications.map(n =>
-        n.id === notificationId ? { ...n, read: true } : n
-      ),
-      unreadCount: Math.max(0, get().unreadCount - 1),
-    });
+  markAsRead: async (id) => {
+    try {
+      await api.markNotificationRead(id);
+      set({
+        notifications: get().notifications.map(n =>
+          n.id === id ? { ...n, read: true } : n
+        ),
+        unreadCount: Math.max(0, get().unreadCount - 1),
+      });
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
   },
 
   markAllAsRead: async () => {
-    await api.markAllAsRead();
-    set({
-      notifications: get().notifications.map(n => ({ ...n, read: true })),
-      unreadCount: 0,
-    });
+    try {
+      await api.markAllNotificationsRead();
+      set({
+        notifications: get().notifications.map(n => ({ ...n, read: true })),
+        unreadCount: 0,
+      });
+    } catch (error) {
+      console.error('Failed to mark all as read:', error);
+    }
   },
 
-  addNotification: (notification) => {
-    set({
-      notifications: [notification, ...get().notifications],
-      unreadCount: get().unreadCount + 1,
-    });
+  deleteNotification: async (id) => {
+    try {
+      await api.deleteNotification(id);
+      const notification = get().notifications.find(n => n.id === id);
+      set({
+        notifications: get().notifications.filter(n => n.id !== id),
+        unreadCount: notification?.read ? get().unreadCount : Math.max(0, get().unreadCount - 1),
+      });
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+    }
   },
 }));

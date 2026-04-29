@@ -1,153 +1,154 @@
+import { FastifyInstance } from 'fastify';
 import { WebSocket } from 'ws';
+import { prisma } from '../lib/prisma.js';
+import jwt from '@fastify/jwt';
 
-interface Connection {
+interface ConnectedClient {
+  socket: WebSocket;
   userId: string;
   familyIds: string[];
-  socket: WebSocket;
 }
 
-const connections = new Map<string, Connection>();
-const familyConnections = new Map<string, Set<string>>(); // familyId -> Set<userId>
+const clients = new Map<string, ConnectedClient>();
 
-export function websocketHandler(connection: any, request: any) {
-  const socket = connection.socket as WebSocket;
-  let userId: string | null = null;
-  let userFamilies: string[] = [];
+export function setupWebSocket(fastify: FastifyInstance) {
+  fastify.get('/ws', { websocket: true }, (connection, req) => {
+    const socket = connection.socket;
+    let userId: string | null = null;
 
-  socket.on('message', async (data) => {
-    try {
-      const message = JSON.parse(data.toString());
+    // Handle authentication
+    socket.on('message', async (message: Buffer) => {
+      try {
+        const data = JSON.parse(message.toString());
 
-      switch (message.type) {
-        case 'AUTH': {
-          // Client sends auth token after connection
-          userId = message.userId;
-          userFamilies = message.familyIds || [];
+        // Authentication message
+        if (data.type === 'auth') {
+          try {
+            const decoded = await fastify.jwt.verify<{ userId: string }>(data.token);
+            userId = decoded.userId;
 
-          if (userId) {
-            connections.set(userId, {
-              userId,
-              familyIds: userFamilies,
-              socket
+            // Get user's families
+            const memberships = await prisma.familyMember.findMany({
+              where: { userId },
+              select: { familyId: true },
             });
 
-            // Register user in family connections
-            for (const familyId of userFamilies) {
-              if (!familyConnections.has(familyId)) {
-                familyConnections.set(familyId, new Set());
-              }
-              familyConnections.get(familyId)!.add(userId);
-            }
+            const familyIds = memberships.map(m => m.familyId);
+
+            clients.set(userId, {
+              socket,
+              userId,
+              familyIds,
+            });
+
+            socket.send(JSON.stringify({ type: 'auth', success: true }));
+
+            // Send unread notification count
+            const unreadCount = await prisma.notification.count({
+              where: { userId, read: false },
+            });
 
             socket.send(JSON.stringify({
-              type: 'AUTH_SUCCESS',
-              payload: { userId, connectedFamilies: userFamilies }
+              type: 'notification_count',
+              count: unreadCount,
             }));
+          } catch (err) {
+            socket.send(JSON.stringify({ type: 'auth', success: false, error: 'Invalid token' }));
           }
-          break;
+          return;
         }
 
-        case 'JOIN_FAMILY': {
-          const { familyId } = message.payload;
-          if (userId && familyId) {
-            if (!familyConnections.has(familyId)) {
-              familyConnections.set(familyId, new Set());
-            }
-            familyConnections.get(familyId)!.add(userId);
-            userFamilies.push(familyId);
+        // Chat message
+        if (data.type === 'chat_message' && userId) {
+          const { familyId, content } = data;
 
-            const conn = connections.get(userId);
-            if (conn) {
-              conn.familyIds = userFamilies;
-            }
+          const client = clients.get(userId);
+          if (!client?.familyIds.includes(familyId)) {
+            socket.send(JSON.stringify({ type: 'error', error: 'Not a member of this family' }));
+            return;
           }
-          break;
+
+          // Save message
+          const message = await prisma.message.create({
+            data: {
+              familyId,
+              userId,
+              content,
+              type: 'TEXT',
+            },
+            include: {
+              user: {
+                select: { id: true, name: true, avatar: true },
+              },
+            },
+          });
+
+          // Broadcast to family members
+          broadcastToFamily(familyId, {
+            type: 'chat_message',
+            message,
+          });
         }
 
-        case 'LEAVE_FAMILY': {
-          const { familyId } = message.payload;
-          if (userId && familyId) {
-            familyConnections.get(familyId)?.delete(userId);
-            userFamilies = userFamilies.filter(f => f !== familyId);
-
-            const conn = connections.get(userId);
-            if (conn) {
-              conn.familyIds = userFamilies;
-            }
-          }
-          break;
-        }
-
-        case 'PING': {
-          socket.send(JSON.stringify({ type: 'PONG' }));
-          break;
-        }
-
-        case 'TYPING': {
-          const { familyId } = message.payload;
-          if (userId && familyId) {
+        // Typing indicator
+        if (data.type === 'typing' && userId) {
+          const { familyId } = data;
+          const client = clients.get(userId);
+          if (client?.familyIds.includes(familyId)) {
             broadcastToFamily(familyId, {
-              type: 'USER_TYPING',
-              payload: { userId, familyId }
-            }, userId);
+              type: 'typing',
+              userId,
+              familyId,
+            }, [userId]); // Exclude sender
           }
-          break;
         }
+
+        // Mark notifications read
+        if (data.type === 'mark_notifications_read' && userId) {
+          await prisma.notification.updateMany({
+            where: { userId, read: false },
+            data: { read: true },
+          });
+
+          socket.send(JSON.stringify({
+            type: 'notification_count',
+            count: 0,
+          }));
+        }
+      } catch (err) {
+        console.error('WebSocket error:', err);
+        socket.send(JSON.stringify({ type: 'error', error: 'Invalid message format' }));
       }
-    } catch (error) {
-      console.error('WebSocket message error:', error);
-    }
-  });
+    });
 
-  socket.on('close', () => {
-    if (userId) {
-      // Remove from family connections
-      for (const familyId of userFamilies) {
-        familyConnections.get(familyId)?.delete(userId);
+    socket.on('close', () => {
+      if (userId) {
+        clients.delete(userId);
       }
-      connections.delete(userId);
-    }
-  });
+    });
 
-  socket.on('error', (error) => {
-    console.error('WebSocket error:', error);
+    socket.on('error', (err) => {
+      console.error('WebSocket error:', err);
+    });
   });
-
-  // Send initial connection success
-  socket.send(JSON.stringify({ type: 'CONNECTED' }));
 }
 
-export function broadcastToFamily(familyId: string, message: any, excludeUserId?: string) {
-  const memberIds = familyConnections.get(familyId);
-  if (!memberIds) return;
-
-  const payload = JSON.stringify(message);
-
-  for (const memberId of memberIds) {
-    if (excludeUserId && memberId === excludeUserId) continue;
-
-    const connection = connections.get(memberId);
-    if (connection && connection.socket.readyState === WebSocket.OPEN) {
-      connection.socket.send(payload);
+// Broadcast message to all connected clients in a family
+function broadcastToFamily(familyId: string, message: any, excludeUserIds: string[] = []) {
+  for (const [userId, client] of clients.entries()) {
+    if (excludeUserIds.includes(userId)) continue;
+    if (client.familyIds.includes(familyId)) {
+      if (client.socket.readyState === WebSocket.OPEN) {
+        client.socket.send(JSON.stringify(message));
+      }
     }
   }
 }
 
-export function sendToUser(userId: string, message: any) {
-  const connection = connections.get(userId);
-  if (connection && connection.socket.readyState === WebSocket.OPEN) {
-    connection.socket.send(JSON.stringify(message));
+// Broadcast to specific user
+export function broadcastToUser(userId: string, message: any) {
+  const client = clients.get(userId);
+  if (client && client.socket.readyState === WebSocket.OPEN) {
+    client.socket.send(JSON.stringify(message));
   }
-}
-
-export function isUserOnline(userId: string): boolean {
-  const connection = connections.get(userId);
-  return !!connection && connection.socket.readyState === WebSocket.OPEN;
-}
-
-export function getOnlineFamilyMembers(familyId: string): string[] {
-  const memberIds = familyConnections.get(familyId);
-  if (!memberIds) return [];
-
-  return Array.from(memberIds).filter(userId => isUserOnline(userId));
 }

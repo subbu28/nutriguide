@@ -1,114 +1,74 @@
-import { Routes, Route } from 'react-router-dom';
-import { Layout } from './components/Layout';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { Home } from './pages/Home';
-import { Auth } from './pages/Auth';
-import { Favorites } from './pages/Favorites';
-import { Family } from './pages/Family';
-import { Premium } from './pages/Premium';
-import { Settings } from './pages/Settings';
-import { Profile } from './pages/Profile';
-import { MealPlanner } from './pages/MealPlanner';
-import { ShoppingListPage } from './pages/ShoppingListPage';
-import { Notifications } from './pages/Notifications';
-import { NutritionDashboard } from './pages/NutritionDashboard';
-import { MealHistory } from './pages/MealHistory';
-import { PWAInstallPrompt } from './components/PWAInstallPrompt';
-import { OfflineIndicator } from './components/OfflineIndicator';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuthStore } from './stores/authStore.js';
+import { Layout } from './components/Layout.js';
+import { ProtectedRoute } from './components/ProtectedRoute.js';
 
-export default function App() {
+// Pages
+import { Home } from './pages/Home.js';
+import { Auth } from './pages/Auth.js';
+import { Profile } from './pages/Profile.js';
+import { Settings } from './pages/Settings.js';
+import { Favorites } from './pages/Favorites.js';
+import { Family } from './pages/Family.js';
+import { FamilyDetail } from './pages/FamilyDetail.js';
+import { MealPlanner } from './pages/MealPlanner.js';
+import { MealHistory } from './pages/MealHistory.js';
+import { NutritionDashboard } from './pages/NutritionDashboard.js';
+import { ShoppingLists } from './pages/ShoppingLists.js';
+import { Recipes } from './pages/Recipes.js';
+import { RecipeDetail } from './pages/RecipeDetail.js';
+import { CreateRecipe } from './pages/CreateRecipe.js';
+import { Premium } from './pages/Premium.js';
+import { Notifications } from './pages/Notifications.js';
+import { AIAssistant } from './pages/AIAssistant.js';
+import { Landing } from './pages/Landing.js';
+import { NotFound } from './pages/NotFound.js';
+import { Search } from './pages/Search.js';
+
+function App() {
+  const { user, isLoading } = useAuthStore();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600" />
+      </div>
+    );
+  }
+
   return (
-    <ErrorBoundary>
-      <OfflineIndicator />
-      <PWAInstallPrompt />
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="auth" element={<Auth />} />
-          <Route path="premium" element={<Premium />} />
-          <Route
-            path="favorites"
-            element={
-              <ProtectedRoute>
-                <Favorites />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="family"
-            element={
-              <ProtectedRoute>
-                <Family />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="family/:familyId"
-            element={
-              <ProtectedRoute>
-                <Family />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="settings"
-            element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile"
-            element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="meal-planner"
-            element={
-              <ProtectedRoute>
-                <MealPlanner />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="shopping-list"
-            element={
-              <ProtectedRoute>
-                <ShoppingListPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="notifications"
-            element={
-              <ProtectedRoute>
-                <Notifications />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="nutrition-dashboard"
-            element={
-              <ProtectedRoute>
-                <NutritionDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="meal-history"
-            element={
-              <ProtectedRoute>
-                <MealHistory />
-              </ProtectedRoute>
-            }
-          />
+    <Routes>
+      {/* Public routes */}
+      <Route path="/landing" element={!user ? <Landing /> : <Navigate to="/" />} />
+      <Route path="/login" element={!user ? <Auth mode="login" /> : <Navigate to="/" />} />
+      <Route path="/register" element={!user ? <Auth mode="register" /> : <Navigate to="/" />} />
+
+      {/* Protected routes */}
+      <Route element={<ProtectedRoute />}>        <Route element={<Layout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/recipes" element={<Recipes />} />
+          <Route path="/recipes/:id" element={<RecipeDetail />} />
+          <Route path="/recipes/create" element={<CreateRecipe />} />
+          <Route path="/favorites" element={<Favorites />} />
+          <Route path="/family" element={<Family />} />
+          <Route path="/family/:id" element={<FamilyDetail />} />
+          <Route path="/meal-planner" element={<MealPlanner />} />
+          <Route path="/meal-history" element={<MealHistory />} />
+          <Route path="/nutrition" element={<NutritionDashboard />} />
+          <Route path="/shopping-lists" element={<ShoppingLists />} />
+          <Route path="/ai-assistant" element={<AIAssistant />} />
+          <Route path="/search" element={<Search />} />
+          <Route path="/premium" element={<Premium />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
-      </Routes>
-    </ErrorBoundary>
+      </Route>
+
+      {/* 404 */}
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 }
+
+export default App;

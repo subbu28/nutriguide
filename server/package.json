@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:fresh": "lsof -ti:3001 | xargs kill -9 2>/dev/null; tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
@@ -22,6 +23,7 @@
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
+    "resend": "^6.9.3",
     "stripe": "^15.8.0",
     "zod": "^3.23.8"
   },

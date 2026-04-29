@@ -51,8 +51,8 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   fetchFamily: async (familyId) => {
     set({ isLoading: true });
     try {
-      const { family, myRole } = await api.getFamily(familyId);
-      set({ currentFamily: { ...family, myRole }, isLoading: false });
+      const family = await api.getFamily(familyId);
+      set({ currentFamily: family, isLoading: false });
     } catch (error) {
       console.error('Failed to fetch family:', error);
       set({ isLoading: false });
@@ -60,7 +60,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   createFamily: async (name) => {
-    const { family } = await api.createFamily(name);
+    const family = await api.createFamily(name);
     set({ families: [...get().families, family] });
     wsClient.joinFamily(family.id);
     return family;
@@ -92,7 +92,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   createPoll: async (data) => {
-    const { poll } = await api.createPoll(data);
+    const poll = await api.createPoll(data);
     set({ polls: [...get().polls, poll] });
   },
 

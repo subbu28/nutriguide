@@ -3,107 +3,107 @@ import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
-import { config } from './config/index.js';
-import { authRoutes } from './routes/auth.js';
-import { mealsRoutes } from './routes/meals.js';
-import { favoritesRoutes } from './routes/favorites.js';
-import { familyRoutes } from './routes/family.js';
-import { pollRoutes } from './routes/polls.js';
-import { chatRoutes } from './routes/chat.js';
-import { paymentRoutes } from './routes/payments.js';
-import { notificationRoutes } from './routes/notifications.js';
-import { profileRoutes } from './routes/profile.js';
-import { mealPlannerRoutes } from './routes/mealplanner.js';
-import { websocketHandler } from './websocket/index.js';
+import dotenv from 'dotenv';
 import { prisma } from './lib/prisma.js';
-import { logger } from './lib/logger.js';
-import { loggingMiddleware } from './middleware/logging.middleware.js';
+import { setupWebSocket } from './websocket/index.js';
+
+// Import routes
+import authRoutes from './routes/auth.js';
+import userRoutes from './routes/user.js';
+import mealRoutes from './routes/meals.js';
+import favoriteRoutes from './routes/favorites.js';
+import familyRoutes from './routes/family.js';
+import pollRoutes from './routes/polls.js';
+import chatRoutes from './routes/chat.js';
+import notificationRoutes from './routes/notifications.js';
+import paymentRoutes from './routes/payments.js';
+import couponRoutes from './routes/coupons.js';
+import paymentMethodRoutes from './routes/payment-methods.js';
+import mealPlannerRoutes from './routes/mealplanner.js';
+import recipeRoutes from './routes/recipes.js';
+import reviewRoutes from './routes/reviews.js';
+import shoppingListRoutes from './routes/shopping-list.js';
+import mealHistoryRoutes from './routes/meal-history.js';
+import socialRoutes from './routes/social.js';
+import aiRoutes from './routes/ai.js';
+import healthRoutes from './routes/health.js';
+
+dotenv.config();
 
 const fastify = Fastify({
-  logger: false, // Using custom logger
+  logger: {
+    level: process.env.LOG_LEVEL || 'info',
+    transport: process.env.NODE_ENV === 'development' ? {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+      },
+    } : undefined,
+  },
 });
 
-async function start() {
-  try {
-    // Register plugins
-    await fastify.register(cors, {
-      origin: config.corsOrigin,
-      credentials: true
-    });
+// Register plugins
+await fastify.register(cors, {
+  origin: process.env.CORS_ORIGIN || true,
+  credentials: true,
+});
 
-    await fastify.register(cookie, {
-      secret: config.cookieSecret,
-      parseOptions: {}
-    });
+await fastify.register(jwt, {
+  secret: process.env.JWT_SECRET!,
+  cookie: {
+    cookieName: 'token',
+    signed: true,
+  },
+});
 
-    await fastify.register(jwt, {
-      secret: config.jwtSecret,
-      cookie: {
-        cookieName: 'token',
-        signed: false
-      }
-    });
+await fastify.register(cookie, {
+  secret: process.env.COOKIE_SECRET!,
+  parseOptions: {},
+});
 
-    await fastify.register(websocket);
+await fastify.register(websocket);
 
-    // Register logging middleware
-    await loggingMiddleware(fastify);
+// Register routes
+await fastify.register(authRoutes, { prefix: '/api/auth' });
+await fastify.register(userRoutes, { prefix: '/api/user' });
+await fastify.register(mealRoutes, { prefix: '/api/meals' });
+await fastify.register(favoriteRoutes, { prefix: '/api/favorites' });
+await fastify.register(familyRoutes, { prefix: '/api/family' });
+await fastify.register(pollRoutes, { prefix: '/api/polls' });
+await fastify.register(chatRoutes, { prefix: '/api/chat' });
+await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
+await fastify.register(paymentRoutes, { prefix: '/api/payments' });
+await fastify.register(couponRoutes, { prefix: '/api/coupons' });
+await fastify.register(paymentMethodRoutes, { prefix: '/api/payment-methods' });
+await fastify.register(mealPlannerRoutes, { prefix: '/api/mealplanner' });
+await fastify.register(recipeRoutes, { prefix: '/api/recipes' });
+await fastify.register(reviewRoutes, { prefix: '/api/reviews' });
+await fastify.register(shoppingListRoutes, { prefix: '/api/shopping-lists' });
+await fastify.register(mealHistoryRoutes, { prefix: '/api/meal-history' });
+await fastify.register(socialRoutes, { prefix: '/api/social' });
+await fastify.register(aiRoutes, { prefix: '/api/ai' });
+await fastify.register(healthRoutes, { prefix: '/health' });
 
-    // Decorate with prisma
-    fastify.decorate('prisma', prisma);
-
-    // Auth decorator
-    fastify.decorate('authenticate', async function(request: any, reply: any) {
-      try {
-        await request.jwtVerify();
-      } catch (err) {
-        reply.status(401).send({ error: 'Unauthorized' });
-      }
-    });
-
-    // Health check
-    fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
-
-    // Register routes
-    await fastify.register(authRoutes, { prefix: '/api/auth' });
-    await fastify.register(mealsRoutes, { prefix: '/api/meals' });
-    await fastify.register(favoritesRoutes, { prefix: '/api/favorites' });
-    await fastify.register(familyRoutes, { prefix: '/api/family' });
-    await fastify.register(pollRoutes, { prefix: '/api/polls' });
-    await fastify.register(chatRoutes, { prefix: '/api/chat' });
-    await fastify.register(paymentRoutes, { prefix: '/api/payments' });
-    await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
-    await fastify.register(profileRoutes, { prefix: '/api/user' });
-    await fastify.register(mealPlannerRoutes, { prefix: '/api/mealplanner' });
-
-    // WebSocket for real-time features
-    fastify.register(async function(fastify) {
-      fastify.get('/ws', { websocket: true }, websocketHandler);
-    });
-
-    // Start server
-    await fastify.listen({ 
-      port: config.port, 
-      host: '0.0.0.0' 
-    });
-
-    logger.info({ port: config.port }, '🚀 Server running');
-  } catch (err) {
-    logger.error({ err }, 'Server startup failed');
-    process.exit(1);
-  }
-}
+// WebSocket setup
+setupWebSocket(fastify);
 
 // Graceful shutdown
-const signals = ['SIGINT', 'SIGTERM'];
-signals.forEach(signal => {
-  process.on(signal, async () => {
-    logger.info({ signal }, 'Graceful shutdown initiated');
-    await fastify.close();
-    await prisma.$disconnect();
-    logger.info('Server shutdown complete');
-    process.exit(0);
-  });
-});
+const closeGracefully = async (signal: string) => {
+  fastify.log.info(`Received signal ${signal}, closing server gracefully...`);
+  await fastify.close();
+  await prisma.$disconnect();
+  process.exit(0);
+};
 
-start();
+process.on('SIGINT', () => closeGracefully('SIGINT'));
+process.on('SIGTERM', () => closeGracefully('SIGTERM'));
+
+// Start server
+try {
+  const port = parseInt(process.env.PORT || '3001');
+  await fastify.listen({ port, host: '0.0.0.0' });
+  fastify.log.info(`Server listening on port ${port}`);
+} catch (err) {
+  fastify.log.error(err);
+  process.exit(1);
+}

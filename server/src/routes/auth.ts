@@ -1,8 +1,9 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { config } from '../config/index.js';
+import { authenticate } from '../middleware/auth.js';
+import { sendWelcomeEmail } from '../services/email.service.js';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -15,207 +16,223 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
-export async function authRoutes(fastify: FastifyInstance) {
+export default async function authRoutes(fastify: FastifyInstance) {
   // Register
-  fastify.post('/register', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/register', async (request, reply) => {
     try {
-      const body = registerSchema.parse(request.body);
-      
+      const { email, password, name } = registerSchema.parse(request.body);
+
+      // Check if user exists
       const existingUser = await prisma.user.findUnique({
-        where: { email: body.email }
+        where: { email },
       });
 
       if (existingUser) {
         return reply.status(400).send({ error: 'Email already registered' });
       }
 
-      const hashedPassword = await bcrypt.hash(body.password, 12);
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 12);
 
+      // Create user with settings
       const user = await prisma.user.create({
         data: {
-          email: body.email,
+          email,
           password: hashedPassword,
-          name: body.name,
+          name,
+          settings: {
+            create: {},
+          },
         },
         select: {
           id: true,
           email: true,
           name: true,
+          avatar: true,
           isPremium: true,
+          isEmailVerified: true,
           createdAt: true,
-        }
+        },
       });
 
-      const token = fastify.jwt.sign({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        isPremium: user.isPremium,
+      // Generate JWT
+      const token = fastify.jwt.sign({ userId: user.id });
+
+      // Set cookie
+      reply.setCookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       });
 
-      reply
-        .setCookie('token', token, {
-          path: '/',
-          httpOnly: true,
-          secure: !config.isDev,
-          sameSite: 'lax',
-          maxAge: 60 * 60 * 24 * 7, // 7 days
-        })
-        .send({ user, token });
+      // Send welcome email (non-blocking)
+      sendWelcomeEmail(user.email, user.name).catch((error) => {
+        fastify.log.error('Failed to send welcome email:', error);
+      });
+
+      return reply.send({
+        user,
+        token,
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return reply.status(400).send({ error: 'Invalid input', details: error.errors });
+        return reply.status(400).send({ error: error.errors[0].message });
       }
       throw error;
     }
   });
 
   // Login
-  fastify.post('/login', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/login', async (request, reply) => {
     try {
-      const body = loginSchema.parse(request.body);
+      const { email, password } = loginSchema.parse(request.body);
 
+      // Find user
       const user = await prisma.user.findUnique({
-        where: { email: body.email }
+        where: { email },
+        include: { settings: true },
       });
 
       if (!user) {
         return reply.status(401).send({ error: 'Invalid credentials' });
       }
 
-      const validPassword = await bcrypt.compare(body.password, user.password);
-
+      // Verify password
+      const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) {
         return reply.status(401).send({ error: 'Invalid credentials' });
       }
 
-      const token = fastify.jwt.sign({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        isPremium: user.isPremium,
+      // Generate JWT
+      const token = fastify.jwt.sign({ userId: user.id });
+
+      // Set cookie
+      reply.setCookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      reply
-        .setCookie('token', token, {
-          path: '/',
-          httpOnly: true,
-          secure: !config.isDev,
-          sameSite: 'lax',
-          maxAge: 60 * 60 * 24 * 7,
-        })
-        .send({
-          user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            isPremium: user.isPremium,
-            avatar: user.avatar,
-          },
-          token
-        });
+      return reply.send({
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatar: user.avatar,
+          isPremium: user.isPremium,
+          isEmailVerified: user.isEmailVerified,
+          settings: user.settings,
+        },
+        token,
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return reply.status(400).send({ error: 'Invalid input', details: error.errors });
+        return reply.status(400).send({ error: error.errors[0].message });
       }
       throw error;
     }
   });
 
-  // Logout
-  fastify.post('/logout', async (request: FastifyRequest, reply: FastifyReply) => {
-    reply
-      .clearCookie('token', { path: '/' })
-      .send({ message: 'Logged out successfully' });
-  });
-
   // Get current user
-  fastify.get('/me', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/me', { preHandler: authenticate }, async (request, reply) => {
     const user = await prisma.user.findUnique({
-      where: { id: request.user.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatar: true,
-        isPremium: true,
-        createdAt: true,
-        _count: {
-          select: {
-            favorites: true,
-            familyMemberships: true,
-          }
-        }
-      }
+      where: { id: request.user!.id },
+      include: { settings: true },
     });
 
     if (!user) {
       return reply.status(404).send({ error: 'User not found' });
     }
 
-    return { user };
+    return reply.send({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatar: user.avatar,
+      bio: user.bio,
+      isPremium: user.isPremium,
+      isEmailVerified: user.isEmailVerified,
+      settings: user.settings,
+    });
+  });
+
+  // Logout
+  fastify.post('/logout', async (request, reply) => {
+    reply.clearCookie('token');
+    return reply.send({ message: 'Logged out successfully' });
   });
 
   // Update profile
-  fastify.patch('/profile', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.patch('/profile', { preHandler: authenticate }, async (request, reply) => {
     const updateSchema = z.object({
       name: z.string().min(2).optional(),
       avatar: z.string().url().optional(),
+      bio: z.string().max(500).optional(),
     });
 
-    const body = updateSchema.parse(request.body);
+    try {
+      const data = updateSchema.parse(request.body);
 
-    const user = await prisma.user.update({
-      where: { id: request.user.id },
-      data: body,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatar: true,
-        isPremium: true,
+      const user = await prisma.user.update({
+        where: { id: request.user!.id },
+        data,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatar: true,
+          bio: true,
+          isPremium: true,
+          isEmailVerified: true,
+        },
+      });
+
+      return reply.send(user);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ error: error.errors[0].message });
       }
-    });
-
-    return { user };
+      throw error;
+    }
   });
 
   // Change password
-  fastify.post('/change-password', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/change-password', { preHandler: authenticate }, async (request, reply) => {
     const schema = z.object({
       currentPassword: z.string(),
       newPassword: z.string().min(8),
     });
 
-    const body = schema.parse(request.body);
+    try {
+      const { currentPassword, newPassword } = schema.parse(request.body);
 
-    const user = await prisma.user.findUnique({
-      where: { id: request.user.id }
-    });
+      const user = await prisma.user.findUnique({
+        where: { id: request.user!.id },
+      });
 
-    if (!user) {
-      return reply.status(404).send({ error: 'User not found' });
+      if (!user) {
+        return reply.status(404).send({ error: 'User not found' });
+      }
+
+      const validPassword = await bcrypt.compare(currentPassword, user.password);
+      if (!validPassword) {
+        return reply.status(401).send({ error: 'Current password is incorrect' });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { password: hashedPassword },
+      });
+
+      return reply.send({ message: 'Password updated successfully' });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ error: error.errors[0].message });
+      }
+      throw error;
     }
-
-    const validPassword = await bcrypt.compare(body.currentPassword, user.password);
-
-    if (!validPassword) {
-      return reply.status(400).send({ error: 'Current password is incorrect' });
-    }
-
-    const hashedPassword = await bcrypt.hash(body.newPassword, 12);
-
-    await prisma.user.update({
-      where: { id: request.user.id },
-      data: { password: hashedPassword }
-    });
-
-    return { message: 'Password changed successfully' };
   });
 }

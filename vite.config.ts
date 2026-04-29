@@ -107,8 +107,11 @@ export default defineConfig(({ mode }) => {
           ],
         },
         devOptions: {
-          enabled: true,
+          enabled: false, // Disable PWA in dev to reduce console noise
+          type: 'module',
+          navigateFallback: 'index.html',
         },
+        injectRegister: 'auto',
       }),
     ],
     define: {

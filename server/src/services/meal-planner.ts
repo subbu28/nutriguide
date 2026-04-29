@@ -53,18 +53,21 @@ export interface WeekPlan {
   sunday: DayPlan;
 }
 
-// Category mappings for meal slots
-const BREAKFAST_CATEGORIES = ['Breakfast', 'Side', 'Starter', 'Miscellaneous'];
-const LUNCH_CATEGORIES = ['Chicken', 'Beef', 'Pasta', 'Seafood', 'Vegetarian', 'Lamb', 'Pork', 'Goat'];
-const DINNER_CATEGORIES = ['Chicken', 'Beef', 'Pasta', 'Seafood', 'Lamb', 'Pork', 'Vegetarian', 'Miscellaneous', 'Goat'];
+// Diet type mappings - maps user selection to allowed diet types
+const DIET_TYPE_MAPPINGS: Record<string, string[]> = {
+  'vegetarian': ['Vegetarian', 'Vegan'],
+  'vegan': ['Vegan'],
+  'pescetarian': ['Vegetarian', 'Vegan', 'Pescetarian'],
+  'non-vegetarian': ['Non-Vegetarian', 'Pescetarian'],
+};
 
-// Diet type to category mappings
-const DIET_FILTERS: Record<string, { include?: string[]; exclude?: string[] }> = {
-  'vegetarian': { include: ['Vegetarian', 'Vegan', 'Pasta', 'Side', 'Breakfast', 'Dessert'] },
-  'vegan': { include: ['Vegan', 'Vegetarian'], exclude: ['Beef', 'Chicken', 'Pork', 'Lamb', 'Seafood'] },
-  'pescetarian': { include: ['Seafood', 'Vegetarian', 'Pasta', 'Side'], exclude: ['Beef', 'Chicken', 'Pork', 'Lamb'] },
-  'low-carb': { exclude: ['Pasta', 'Dessert'] },
-  'high-protein': { include: ['Chicken', 'Beef', 'Seafood', 'Lamb', 'Pork'] },
+// Category exclusions for specific diets
+const DIET_CATEGORY_EXCLUSIONS: Record<string, string[]> = {
+  'vegetarian': ['chicken', 'beef', 'pork', 'lamb', 'goat', 'meat', 'fish', 'seafood'],
+  'vegan': ['chicken', 'beef', 'pork', 'lamb', 'goat', 'meat', 'fish', 'seafood', 'dairy', 'egg'],
+  'pescetarian': ['chicken', 'beef', 'pork', 'lamb', 'goat', 'meat'],
+  'low-carb': ['pasta', 'bread', 'rice', 'dessert'],
+  'high-protein': [],
 };
 
 // Calorie distribution per slot
@@ -97,26 +100,43 @@ export function isGeminiEnabled(): boolean {
 function filterMealsByDiet(meals: mealdb.TransformedMeal[], diet?: string, exclude?: string): mealdb.TransformedMeal[] {
   let filtered = [...meals];
   
-  if (diet && DIET_FILTERS[diet.toLowerCase()]) {
-    const filter = DIET_FILTERS[diet.toLowerCase()];
+  if (diet) {
+    const dietLower = diet.toLowerCase();
     
-    if (filter.include) {
-      filtered = filtered.filter(m => filter.include!.some(cat => 
-        m.category.toLowerCase().includes(cat.toLowerCase())
-      ));
+    // Filter by diet type field if available
+    const allowedDietTypes = DIET_TYPE_MAPPINGS[dietLower];
+    if (allowedDietTypes) {
+      filtered = filtered.filter(m => {
+        // Check the dietType field first
+        if (m.dietType) {
+          return allowedDietTypes.some(dt => 
+            m.dietType!.toLowerCase() === dt.toLowerCase()
+          );
+        }
+        // Fallback: check tags for diet info
+        const tags = m.tags || [];
+        const tagsLower = tags.map(t => t.toLowerCase());
+        return allowedDietTypes.some(dt => 
+          tagsLower.includes(dt.toLowerCase())
+        );
+      });
     }
     
-    if (filter.exclude) {
-      filtered = filtered.filter(m => !filter.exclude!.some(cat => 
-        m.category.toLowerCase().includes(cat.toLowerCase())
-      ));
+    // Also filter out excluded categories based on diet
+    const excludedCategories = DIET_CATEGORY_EXCLUSIONS[dietLower];
+    if (excludedCategories && excludedCategories.length > 0) {
+      filtered = filtered.filter(m => {
+        const mealText = `${m.name} ${m.category} ${(m.tags || []).join(' ')}`.toLowerCase();
+        return !excludedCategories.some(exc => mealText.includes(exc));
+      });
     }
   }
   
+  // Handle user-specified exclusions
   if (exclude) {
     const excludeTerms = exclude.toLowerCase().split(',').map(t => t.trim());
     filtered = filtered.filter(m => {
-      const mealText = `${m.name} ${m.category}`.toLowerCase();
+      const mealText = `${m.name} ${m.category} ${(m.tags || []).join(' ')}`.toLowerCase();
       return !excludeTerms.some(term => mealText.includes(term));
     });
   }
@@ -126,25 +146,39 @@ function filterMealsByDiet(meals: mealdb.TransformedMeal[], diet?: string, exclu
 
 /**
  * Select a random meal from a category list
+ * The meals passed in should already be filtered by diet
  */
 function selectMealForSlot(
   meals: mealdb.TransformedMeal[],
-  categories: string[],
+  slot: 'breakfast' | 'lunch' | 'dinner' | 'snack',
   usedIds: Set<string>
 ): mealdb.TransformedMeal | null {
-  const eligible = meals.filter(m => 
-    categories.some(cat => m.category.toLowerCase().includes(cat.toLowerCase())) &&
-    !usedIds.has(m.id)
-  );
+  // First, filter out already used meals
+  const available = meals.filter(m => !usedIds.has(m.id));
+  if (available.length === 0) return null;
   
-  if (eligible.length === 0) {
-    // Fallback to any unused meal
-    const fallback = meals.filter(m => !usedIds.has(m.id));
-    if (fallback.length === 0) return null;
-    return fallback[Math.floor(Math.random() * fallback.length)];
+  // Try to find meals that match the slot based on tags
+  const slotKeywords: Record<string, string[]> = {
+    breakfast: ['breakfast', 'morning', 'brunch', 'oatmeal', 'pancake', 'egg', 'smoothie', 'juice'],
+    lunch: ['lunch', 'salad', 'sandwich', 'soup', 'bowl', 'wrap'],
+    dinner: ['dinner', 'main', 'entree', 'curry', 'stew', 'roast', 'pasta'],
+    snack: ['snack', 'appetizer', 'starter', 'bite', 'dip', 'chips'],
+  };
+  
+  const keywords = slotKeywords[slot] || [];
+  
+  // Try to find a meal matching slot keywords
+  const slotMatches = available.filter(m => {
+    const mealText = `${m.name} ${m.category} ${(m.tags || []).join(' ')}`.toLowerCase();
+    return keywords.some(kw => mealText.includes(kw));
+  });
+  
+  if (slotMatches.length > 0) {
+    return slotMatches[Math.floor(Math.random() * slotMatches.length)];
   }
   
-  return eligible[Math.floor(Math.random() * eligible.length)];
+  // Fallback to any available meal
+  return available[Math.floor(Math.random() * available.length)];
 }
 
 /**
@@ -184,7 +218,7 @@ async function generateDayPlanRuleBased(
   let totalNutrients: NutritionInfo = { calories: 0, protein: 0, carbohydrates: 0, fat: 0 };
   
   // Select breakfast
-  const breakfastMeal = selectMealForSlot(filteredMeals, BREAKFAST_CATEGORIES, usedMealIds);
+  const breakfastMeal = selectMealForSlot(filteredMeals, 'breakfast', usedMealIds);
   if (breakfastMeal) {
     usedMealIds.add(breakfastMeal.id);
     const planned = toPlannedMeal(breakfastMeal, 'breakfast');
@@ -199,7 +233,7 @@ async function generateDayPlanRuleBased(
   }
   
   // Select lunch
-  const lunchMeal = selectMealForSlot(filteredMeals, LUNCH_CATEGORIES, usedMealIds);
+  const lunchMeal = selectMealForSlot(filteredMeals, 'lunch', usedMealIds);
   if (lunchMeal) {
     usedMealIds.add(lunchMeal.id);
     const planned = toPlannedMeal(lunchMeal, 'lunch');
@@ -214,7 +248,7 @@ async function generateDayPlanRuleBased(
   }
   
   // Select dinner
-  const dinnerMeal = selectMealForSlot(filteredMeals, DINNER_CATEGORIES, usedMealIds);
+  const dinnerMeal = selectMealForSlot(filteredMeals, 'dinner', usedMealIds);
   if (dinnerMeal) {
     usedMealIds.add(dinnerMeal.id);
     const planned = toPlannedMeal(dinnerMeal, 'dinner');
@@ -374,12 +408,7 @@ export async function regenerateMeal(
   const filteredMeals = filterMealsByDiet(allMeals, request.diet, request.exclude);
   const usedIds = new Set(excludeMealIds);
   
-  const categories = slot === 'breakfast' ? BREAKFAST_CATEGORIES :
-                     slot === 'lunch' ? LUNCH_CATEGORIES :
-                     slot === 'dinner' ? DINNER_CATEGORIES :
-                     BREAKFAST_CATEGORIES;
-  
-  const meal = selectMealForSlot(filteredMeals, categories, usedIds);
+  const meal = selectMealForSlot(filteredMeals, slot, usedIds);
   
   if (meal) {
     return toPlannedMeal(meal, slot);

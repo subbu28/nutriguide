@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Calendar, ChefHat, Sparkles, Clock, Users, Flame, 
@@ -12,6 +12,7 @@ import { useAuthStore } from '../stores/authStore';
 import { RecipeDetailModal } from '../components/RecipeDetailModal';
 import { ShoppingList } from '../components/ShoppingList';
 import { NutritionChart } from '../components/NutritionChart';
+import { SwapMealModal } from '../components/SwapMealModal';
 
 interface Meal {
   id: number;
@@ -96,6 +97,14 @@ export const MealPlanner: React.FC = () => {
   // Shopping list
   const [shoppingList, setShoppingList] = useState<any[]>([]);
   const [showShoppingList, setShowShoppingList] = useState(false);
+  
+  // Swap meal modal
+  const [showSwapModal, setShowSwapModal] = useState(false);
+  const [swapMealData, setSwapMealData] = useState<{ meal: any; day: string; index: number } | null>(null);
+  const [swappingMealId, setSwappingMealId] = useState<string | null>(null);
+  
+  // Ref to prevent double saves
+  const isSavingRef = useRef(false);
 
   useEffect(() => {
     checkStatus();
@@ -120,11 +129,62 @@ export const MealPlanner: React.FC = () => {
 
   const loadSavedPlans = async () => {
     try {
-      const { mealPlans } = await api.getMealPlans();
-      setSavedPlans(mealPlans);
+      const { plans } = await api.getMealPlans();
+      setSavedPlans(plans || []);
     } catch (err) {
       console.error('Failed to load saved plans:', err);
+      setSavedPlans([]);
     }
+  };
+
+  const loadSavedPlan = (plan: any) => {
+    // Convert saved plan meals back to week plan format
+    const newWeekPlan: WeekPlan = {};
+    
+    if (plan.meals && plan.meals.length > 0) {
+      // Group meals by day
+      plan.meals.forEach((meal: any) => {
+        const mealDate = new Date(meal.date);
+        const dayIndex = Math.floor((mealDate.getTime() - new Date(plan.startDate).getTime()) / (1000 * 60 * 60 * 24));
+        const dayName = DAYS[dayIndex] || DAYS[0];
+        
+        if (!newWeekPlan[dayName]) {
+          newWeekPlan[dayName] = {
+            meals: [],
+            nutrients: { calories: 0, protein: 0, carbohydrates: 0, fat: 0 }
+          };
+        }
+        
+        // Convert saved meal to display format
+        const mealData = meal.recipeData || {};
+        newWeekPlan[dayName].meals.push({
+          id: meal.recipeId,
+          title: meal.recipeName,
+          image: meal.recipeImage || mealData.image || '',
+          readyInMinutes: mealData.readyInMinutes || 30,
+          servings: meal.servings || mealData.servings || 4,
+          calories: mealData.calories || 0,
+          protein: mealData.protein || 0,
+          fat: mealData.fat || 0,
+          carbohydrates: mealData.carbohydrates || 0,
+          slot: meal.slot?.toLowerCase() || 'dinner',
+        });
+        
+        // Update nutrients
+        newWeekPlan[dayName].nutrients.calories += mealData.calories || 0;
+        newWeekPlan[dayName].nutrients.protein += mealData.protein || 0;
+        newWeekPlan[dayName].nutrients.carbohydrates += mealData.carbohydrates || 0;
+        newWeekPlan[dayName].nutrients.fat += mealData.fat || 0;
+      });
+    }
+    
+    setWeekPlan(newWeekPlan);
+    setPlanName(plan.name);
+    setSelectedDiet(plan.diet || '');
+    setTargetCalories(plan.targetCalories || 2000);
+    setExcludeIngredients(plan.excludeIngredients || '');
+    setShowSettings(false);
+    setSelectedDay('monday');
   };
 
   const generatePlan = async () => {
@@ -160,8 +220,9 @@ export const MealPlanner: React.FC = () => {
   };
 
   const savePlan = async () => {
-    if (!weekPlan || !planName.trim()) return;
+    if (!weekPlan || !planName.trim() || isSaving || isSavingRef.current) return;
     
+    isSavingRef.current = true;
     setIsSaving(true);
     try {
       const today = new Date();
@@ -179,24 +240,24 @@ export const MealPlanner: React.FC = () => {
         dayPlan.meals.forEach((meal, idx) => {
           const slots = ['BREAKFAST', 'LUNCH', 'DINNER'] as const;
           meals.push({
-            date: mealDate.toISOString().split('T')[0],
+            date: mealDate.toISOString(),
             slot: slots[idx] || 'SNACK',
             recipeId: meal.id.toString(),
             recipeName: meal.title,
-            recipeImage: meal.image,
+            recipeImage: meal.image || '',
             recipeData: meal,
-            servings: meal.servings,
+            servings: meal.servings || 1,
           });
         });
       });
       
       await api.saveMealPlan({
         name: planName,
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0],
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
         targetCalories,
-        diet: selectedDiet,
-        excludeIngredients,
+        diet: selectedDiet || '',
+        excludeIngredients: excludeIngredients || '',
         meals,
       });
       
@@ -206,6 +267,7 @@ export const MealPlanner: React.FC = () => {
       setError(err.message || 'Failed to save meal plan');
     } finally {
       setIsSaving(false);
+      isSavingRef.current = false;
     }
   };
 
@@ -214,6 +276,55 @@ export const MealPlanner: React.FC = () => {
     setSelectedRecipeId(recipeId);
     setRecipeSource(source || lastUsedSource);
     setShowRecipeModal(true);
+  };
+
+  // Open swap modal
+  const openSwapModal = (meal: any, day: string, index: number) => {
+    setSwapMealData({ meal, day, index });
+    setShowSwapModal(true);
+  };
+
+  // Handle meal swap with animation
+  const handleMealSwap = (newMeal: any) => {
+    if (!swapMealData || !weekPlan) return;
+    
+    const { day, index } = swapMealData;
+    
+    // Set swapping state for animation
+    setSwappingMealId(swapMealData.meal.id?.toString());
+    
+    // After animation delay, update the meal
+    setTimeout(() => {
+      setWeekPlan(prev => {
+        if (!prev) return prev;
+        
+        const newPlan = { ...prev };
+        const dayPlan = { ...newPlan[day] };
+        const newMeals = [...dayPlan.meals];
+        
+        // Swap the meal
+        newMeals[index] = {
+          ...newMeal,
+          id: newMeal.id,
+          title: newMeal.title,
+          image: newMeal.image,
+          readyInMinutes: newMeal.readyInMinutes || 30,
+          servings: newMeal.servings || 4,
+          calories: newMeal.calories || 0,
+          protein: newMeal.protein || 0,
+          fat: newMeal.fat || 0,
+          carbohydrates: newMeal.carbohydrates || 0,
+        };
+        
+        dayPlan.meals = newMeals;
+        newPlan[day] = dayPlan;
+        
+        return newPlan;
+      });
+      
+      setSwappingMealId(null);
+      setSwapMealData(null);
+    }, 300);
   };
 
   // Add ingredients to shopping list
@@ -511,6 +622,44 @@ export const MealPlanner: React.FC = () => {
           )}
         </AnimatePresence>
 
+        {/* Save Plan Section - Show when plan exists */}
+        {weekPlan && isAuthenticated && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border-2 border-emerald-200 shadow-sm"
+          >
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-stone-800 flex items-center gap-2">
+                  <Save className="w-5 h-5 text-emerald-600" />
+                  Save This Meal Plan
+                </h3>
+                <p className="text-sm text-stone-500 mt-1">Give your plan a name to save it for later</p>
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <input
+                  type="text"
+                  value={planName}
+                  onChange={(e) => setPlanName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                  placeholder="e.g., Week 1 Healthy Plan"
+                  className="flex-1 sm:w-64 py-3 px-4 rounded-xl bg-white border border-emerald-200 text-stone-700 placeholder-stone-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={savePlan}
+                  disabled={isSaving || !planName.trim()}
+                  className="flex items-center gap-2 py-3 px-6 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                >
+                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  Save Plan
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* Week View */}
         {weekPlan && (
           <motion.div
@@ -589,26 +738,6 @@ export const MealPlanner: React.FC = () => {
                 >
                   <Printer className="w-5 h-5" />
                 </button>
-
-                {isAuthenticated && (
-                  <>
-                    <input
-                      type="text"
-                      value={planName}
-                      onChange={(e) => setPlanName(e.target.value)}
-                      placeholder="Plan name..."
-                      className="py-2 px-4 rounded-xl bg-stone-100 border-0 text-sm text-stone-700 placeholder-stone-400 focus:ring-2 focus:ring-emerald-500 w-40"
-                    />
-                    <button
-                      onClick={savePlan}
-                      disabled={isSaving || !planName.trim()}
-                      className="flex items-center gap-2 py-2 px-4 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50"
-                    >
-                      {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      Save
-                    </button>
-                  </>
-                )}
               </div>
             </div>
 
@@ -735,12 +864,24 @@ export const MealPlanner: React.FC = () => {
                         const SlotIcon = SLOT_ICONS[slot];
                         const colors = SLOT_COLORS[slot];
                         
+                        const isSwapping = swappingMealId === meal.id?.toString();
+                        
                         return (
                           <motion.div
                             key={meal.id}
                             initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: idx * 0.1 }}
+                            animate={{ 
+                              opacity: isSwapping ? 0 : 1, 
+                              y: isSwapping ? -20 : 0,
+                              scale: isSwapping ? 0.95 : 1,
+                              rotateY: isSwapping ? 90 : 0,
+                            }}
+                            transition={{ 
+                              delay: isSwapping ? 0 : idx * 0.1,
+                              type: 'spring',
+                              damping: 20,
+                              stiffness: 300,
+                            }}
                             className={`bg-white rounded-2xl overflow-hidden border border-stone-100 shadow-soft hover:shadow-elevated transition-all group ${
                               viewMode === 'list' ? 'flex' : ''
                             }`}
@@ -771,13 +912,15 @@ export const MealPlanner: React.FC = () => {
                                 >
                                   <Eye className="w-4 h-4" />
                                 </button>
-                                <button
-                                  onClick={() => regenerateMeal(selectedDay, idx)}
+                                <motion.button
+                                  onClick={() => openSwapModal(meal, selectedDay, idx)}
+                                  whileHover={{ scale: 1.1, rotate: 180 }}
+                                  whileTap={{ scale: 0.9 }}
                                   className="p-2 rounded-full bg-white/90 backdrop-blur-sm text-stone-600 hover:text-amber-600 transition-colors shadow-lg"
                                   title="Swap Meal"
                                 >
                                   <Shuffle className="w-4 h-4" />
-                                </button>
+                                </motion.button>
                               </div>
                             </div>
                             
@@ -843,12 +986,14 @@ export const MealPlanner: React.FC = () => {
               {savedPlans.map((plan) => (
                 <div
                   key={plan.id}
-                  className="glass rounded-2xl p-4 shadow-soft hover:shadow-elevated transition-all cursor-pointer"
+                  onClick={() => loadSavedPlan(plan)}
+                  className="glass rounded-2xl p-4 shadow-soft hover:shadow-elevated transition-all cursor-pointer hover:border-emerald-300 border-2 border-transparent"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-bold text-stone-800">{plan.name}</h3>
                     <button
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.stopPropagation();
                         await api.deleteMealPlan(plan.id);
                         loadSavedPlans();
                       }}
@@ -868,8 +1013,13 @@ export const MealPlanner: React.FC = () => {
                       {plan.diet}
                     </span>
                   )}
-                  <div className="mt-3 text-xs text-stone-400">
-                    {plan.meals?.length || 0} meals planned
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-xs text-stone-400">
+                      {plan.meals?.length || 0} meals planned
+                    </span>
+                    <span className="text-xs text-emerald-600 font-medium">
+                      Click to view →
+                    </span>
                   </div>
                 </div>
               ))}
@@ -915,6 +1065,19 @@ export const MealPlanner: React.FC = () => {
         onClear={clearShoppingList}
         isOpen={showShoppingList}
         onToggle={() => setShowShoppingList(!showShoppingList)}
+      />
+
+      {/* Swap Meal Modal */}
+      <SwapMealModal
+        isOpen={showSwapModal}
+        onClose={() => {
+          setShowSwapModal(false);
+          setSwapMealData(null);
+        }}
+        currentMeal={swapMealData?.meal}
+        slot={swapMealData?.index !== undefined ? ['breakfast', 'lunch', 'dinner'][swapMealData.index] || 'dinner' : 'dinner'}
+        diet={selectedDiet}
+        onSwap={handleMealSwap}
       />
     </div>
   );
