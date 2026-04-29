@@ -1,5 +1,17 @@
 // Mock data for development when backend is not available
 
+// Demo Login Credentials
+export const mockCredentials = {
+  email: 'demo@nutriguide.com',
+  password: 'demo123',
+  // Alternative accounts
+  accounts: [
+    { email: 'demo@nutriguide.com', password: 'demo123', name: 'Demo User' },
+    { email: 'jane@example.com', password: 'jane123', name: 'Jane Smith' },
+    { email: 'john@example.com', password: 'john123', name: 'John Smith' }
+  ]
+};
+
 export const mockMeals = [
   // Breakfast
   {
@@ -237,6 +249,315 @@ export const mockFamily = {
   inviteCode: 'SMITH2026',
   members: [
     { ...mockUser, role: 'OWNER' },
-    { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'MEMBER' }
+    { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'MEMBER', avatar: 'https://ui-avatars.com/api/?name=Jane+Smith&background=EC4899&color=fff' },
+    { id: '3', name: 'John Smith', email: 'john@example.com', role: 'MEMBER', avatar: 'https://ui-avatars.com/api/?name=John+Smith&background=10B981&color=fff' }
   ]
 };
+
+export const mockRecipes = [
+  {
+    id: '1',
+    title: 'Grilled Chicken Salad',
+    description: 'A healthy and delicious grilled chicken salad with fresh vegetables',
+    prepTime: 15,
+    cookTime: 20,
+    servings: 2,
+    difficulty: 'Easy',
+    category: 'Lunch',
+    dietType: 'High Protein',
+    image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600',
+    ingredients: [
+      '2 chicken breasts',
+      '4 cups mixed greens',
+      '1 cup cherry tomatoes',
+      '1/2 cucumber, sliced',
+      '1/4 red onion, sliced',
+      '2 tbsp olive oil',
+      '1 tbsp balsamic vinegar',
+      'Salt and pepper to taste'
+    ],
+    instructions: [
+      'Season chicken breasts with salt and pepper',
+      'Grill chicken for 6-7 minutes per side until cooked through',
+      'Let chicken rest for 5 minutes, then slice',
+      'Combine greens, tomatoes, cucumber, and onion in a bowl',
+      'Top with sliced chicken',
+      'Drizzle with olive oil and balsamic vinegar',
+      'Serve immediately'
+    ],
+    nutrition: {
+      calories: 350,
+      protein: 35,
+      carbs: 20,
+      fat: 12,
+      fiber: 5
+    },
+    author: mockUser,
+    likes: 24,
+    saves: 12,
+    reviews: 8
+  },
+  {
+    id: '2',
+    title: 'Quinoa Buddha Bowl',
+    description: 'Nutritious vegan bowl packed with quinoa, roasted vegetables, and tahini dressing',
+    prepTime: 20,
+    cookTime: 30,
+    servings: 4,
+    difficulty: 'Medium',
+    category: 'Lunch',
+    dietType: 'Vegan',
+    image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=600',
+    ingredients: [
+      '1 cup quinoa',
+      '2 cups vegetable broth',
+      '1 sweet potato, cubed',
+      '1 cup chickpeas',
+      '2 cups kale',
+      '1 avocado',
+      '1/4 cup tahini',
+      '2 tbsp lemon juice',
+      '1 clove garlic',
+      'Salt and pepper'
+    ],
+    instructions: [
+      'Cook quinoa in vegetable broth according to package directions',
+      'Roast sweet potato cubes at 400°F for 25 minutes',
+      'Roast chickpeas with spices for 20 minutes',
+      'Massage kale with a bit of olive oil',
+      'Make tahini dressing by mixing tahini, lemon juice, garlic, and water',
+      'Assemble bowls with quinoa, roasted vegetables, chickpeas, and kale',
+      'Top with sliced avocado and drizzle with tahini dressing'
+    ],
+    nutrition: {
+      calories: 420,
+      protein: 14,
+      carbs: 55,
+      fat: 16,
+      fiber: 12
+    },
+    author: { id: '2', name: 'Jane Smith', email: 'jane@example.com' },
+    likes: 45,
+    saves: 32,
+    reviews: 15
+  },
+  {
+    id: '3',
+    title: 'Salmon with Roasted Vegetables',
+    description: 'Perfectly cooked salmon with colorful roasted vegetables',
+    prepTime: 10,
+    cookTime: 25,
+    servings: 2,
+    difficulty: 'Easy',
+    category: 'Dinner',
+    dietType: 'Keto',
+    image: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600',
+    ingredients: [
+      '2 salmon fillets (6 oz each)',
+      '2 cups broccoli florets',
+      '1 cup asparagus',
+      '1 red bell pepper, sliced',
+      '2 tbsp olive oil',
+      '1 lemon',
+      'Fresh dill',
+      'Salt and pepper'
+    ],
+    instructions: [
+      'Preheat oven to 425°F',
+      'Arrange vegetables on a baking sheet, drizzle with olive oil',
+      'Season with salt and pepper',
+      'Roast vegetables for 15 minutes',
+      'Place salmon on the baking sheet with vegetables',
+      'Season salmon with salt, pepper, and lemon juice',
+      'Roast for another 10-12 minutes until salmon is cooked',
+      'Garnish with fresh dill and lemon wedges'
+    ],
+    nutrition: {
+      calories: 420,
+      protein: 40,
+      carbs: 15,
+      fat: 22,
+      fiber: 6
+    },
+    author: mockUser,
+    likes: 67,
+    saves: 45,
+    reviews: 22
+  }
+];
+
+export const mockReviews = [
+  {
+    id: '1',
+    recipeId: '1',
+    user: { id: '2', name: 'Jane Smith', avatar: 'https://ui-avatars.com/api/?name=Jane+Smith&background=EC4899&color=fff' },
+    rating: 5,
+    comment: 'Absolutely delicious! Made this for lunch and my whole family loved it. The balsamic dressing is perfect.',
+    helpful: 12,
+    createdAt: new Date('2026-04-20').toISOString()
+  },
+  {
+    id: '2',
+    recipeId: '1',
+    user: { id: '3', name: 'John Smith', avatar: 'https://ui-avatars.com/api/?name=John+Smith&background=10B981&color=fff' },
+    rating: 4,
+    comment: 'Great recipe! I added some feta cheese and it was even better. Will make again.',
+    helpful: 8,
+    createdAt: new Date('2026-04-22').toISOString()
+  },
+  {
+    id: '3',
+    recipeId: '2',
+    user: mockUser,
+    rating: 5,
+    comment: 'This buddha bowl is my new favorite! So filling and nutritious. The tahini dressing is amazing.',
+    helpful: 15,
+    createdAt: new Date('2026-04-25').toISOString()
+  },
+  {
+    id: '4',
+    recipeId: '3',
+    user: { id: '2', name: 'Jane Smith', avatar: 'https://ui-avatars.com/api/?name=Jane+Smith&background=EC4899&color=fff' },
+    rating: 5,
+    comment: 'Perfect keto dinner! The salmon was cooked to perfection and the vegetables were delicious.',
+    helpful: 20,
+    createdAt: new Date('2026-04-26').toISOString()
+  }
+];
+
+export const mockShoppingLists = [
+  {
+    id: '1',
+    name: 'Weekly Groceries',
+    createdAt: new Date().toISOString(),
+    items: [
+      { id: '1', name: 'Chicken breast', quantity: '2 lbs', category: 'Protein', checked: false },
+      { id: '2', name: 'Mixed greens', quantity: '2 bags', category: 'Vegetables', checked: true },
+      { id: '3', name: 'Cherry tomatoes', quantity: '1 pint', category: 'Vegetables', checked: false },
+      { id: '4', name: 'Quinoa', quantity: '1 lb', category: 'Grains', checked: false },
+      { id: '5', name: 'Sweet potato', quantity: '3 large', category: 'Vegetables', checked: false },
+      { id: '6', name: 'Salmon fillets', quantity: '4 pieces', category: 'Protein', checked: false },
+      { id: '7', name: 'Broccoli', quantity: '2 heads', category: 'Vegetables', checked: true },
+      { id: '8', name: 'Olive oil', quantity: '1 bottle', category: 'Pantry', checked: true },
+      { id: '9', name: 'Avocado', quantity: '4', category: 'Produce', checked: false },
+      { id: '10', name: 'Greek yogurt', quantity: '32 oz', category: 'Dairy', checked: false }
+    ]
+  },
+  {
+    id: '2',
+    name: 'Meal Prep Sunday',
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    items: [
+      { id: '11', name: 'Brown rice', quantity: '2 lbs', category: 'Grains', checked: true },
+      { id: '12', name: 'Ground turkey', quantity: '3 lbs', category: 'Protein', checked: true },
+      { id: '13', name: 'Bell peppers', quantity: '6', category: 'Vegetables', checked: true },
+      { id: '14', name: 'Onions', quantity: '3', category: 'Vegetables', checked: true },
+      { id: '15', name: 'Eggs', quantity: '2 dozen', category: 'Protein', checked: true }
+    ]
+  }
+];
+
+export const mockMealHistory = [
+  {
+    id: '1',
+    meal: mockMeals[0],
+    consumedAt: new Date().toISOString(),
+    mealType: 'Breakfast',
+    rating: 5,
+    notes: 'Perfect start to the day!'
+  },
+  {
+    id: '2',
+    meal: mockMeals[4],
+    consumedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+    mealType: 'Lunch',
+    rating: 4,
+    notes: 'Very filling and tasty'
+  },
+  {
+    id: '3',
+    meal: mockMeals[8],
+    consumedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    mealType: 'Dinner',
+    rating: 5,
+    notes: 'Amazing dinner, will make again'
+  },
+  {
+    id: '4',
+    meal: mockMeals[1],
+    consumedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    mealType: 'Breakfast',
+    rating: 5,
+    notes: 'Love avocado toast!'
+  },
+  {
+    id: '5',
+    meal: mockMeals[13],
+    consumedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    mealType: 'Snack',
+    rating: 4,
+    notes: 'Refreshing and healthy'
+  }
+];
+
+export const mockNotifications = [
+  {
+    id: '1',
+    type: 'FAMILY_INVITE',
+    title: 'New Family Member',
+    message: 'John Smith joined your family',
+    read: false,
+    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: '2',
+    type: 'MEAL_SUGGESTION',
+    title: 'New Meal Suggestion',
+    message: 'Jane suggested "Grilled Chicken Salad" for dinner',
+    read: false,
+    createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: '3',
+    type: 'POLL_CREATED',
+    title: 'New Poll',
+    message: 'What should we have for dinner tomorrow?',
+    read: true,
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: '4',
+    type: 'RECIPE_LIKED',
+    title: 'Recipe Liked',
+    message: 'Jane liked your recipe "Salmon with Vegetables"',
+    read: true,
+    createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+  }
+];
+
+export const mockPolls = [
+  {
+    id: '1',
+    question: 'What should we have for dinner tonight?',
+    options: [
+      { id: '1', text: 'Grilled Chicken Salad', votes: 2 },
+      { id: '2', text: 'Salmon with Vegetables', votes: 3 },
+      { id: '3', text: 'Vegetarian Pasta', votes: 1 }
+    ],
+    createdBy: mockUser,
+    endsAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+    totalVotes: 6
+  },
+  {
+    id: '2',
+    question: 'Breakfast preference for Sunday?',
+    options: [
+      { id: '4', text: 'Oatmeal with Berries', votes: 1 },
+      { id: '5', text: 'Protein Pancakes', votes: 4 },
+      { id: '6', text: 'Avocado Toast', votes: 2 }
+    ],
+    createdBy: { id: '2', name: 'Jane Smith' },
+    endsAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+    totalVotes: 7
+  }
+];
