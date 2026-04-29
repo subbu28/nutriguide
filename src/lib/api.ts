@@ -1,12 +1,18 @@
 import { User, UserSettings, Meal, Recipe, Review, Family, MealPoll, Message, Notification, MealPlan, ShoppingList, MealLog, Collection, AIConversation } from '../types/index.js';
+import { mockApi } from './mockApi';
 
 const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3001/api`;
+const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
 class ApiClient {
   private token: string | null = null;
+  private useMock = USE_MOCK_DATA;
 
   setToken(token: string | null) {
     this.token = token;
+    if (this.useMock) {
+      mockApi.setToken(token);
+    }
   }
 
   private async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -20,18 +26,36 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      credentials: 'include',
-    });
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: 'include',
+      });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      // If backend is unavailable, fall back to mock data
+      if (!this.useMock && (error instanceof TypeError || error.message.includes('fetch'))) {
+        console.warn('Backend unavailable, using mock data');
+        this.useMock = true;
+        mockApi.setToken(this.token);
+      }
+      throw error;
     }
+  }
 
-    return response.json();
+  // Helper to route to mock or real API
+  private async call<T>(method: string, ...args: any[]): Promise<T> {
+    if (this.useMock) {
+      return (mockApi as any)[method](...args);
+    }
+    return (this as any)[`_${method}`](...args);
   }
 
   // Auth
