@@ -583,8 +583,3 @@ enum ActivityType {
   MEAL_PLANNED
   MEAL_LOGGED
 }
-
-generator erd {
-  provider = "prisma-erd-generator"
-  output   = "./erd.svg"
-}
