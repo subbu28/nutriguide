@@ -1,5 +1,5 @@
-# Build stage
-FROM node:20-alpine AS builder
+# Production stage
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
+# Install all dependencies (including tsx)
 RUN npm ci
 
 # Generate Prisma client
@@ -16,37 +16,16 @@ RUN npx prisma generate
 # Copy source code
 COPY . .
 
-# Build TypeScript
-RUN npm run build
-
-# Production stage
-FROM node:20-alpine AS production
-
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-COPY prisma ./prisma/
-
-# Install production dependencies only
-RUN npm ci --only=production
-
-# Generate Prisma client
-RUN npx prisma generate
-
-# Copy built files from builder
-COPY --from=builder /app/dist ./dist
-
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=8080
+ENV PORT=3001
 
 # Expose port
-EXPOSE 8080
+EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health || exit 1
 
-# Start the server
-CMD ["node", "dist/index.js"]
+# Start the server with tsx
+CMD ["npm", "start"]
