@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../types/index.js';
 import { api } from '../lib/api.js';
+import { mockApi } from '../lib/mockApi.js';
+
+// Use mock API if backend is unavailable
+const USE_MOCK = import.meta.env.VITE_USE_MOCK_DATA === 'true';
+const apiClient = USE_MOCK ? mockApi : api;
 
 interface AuthState {
   user: User | null;
@@ -33,20 +38,20 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setToken: (token) => {
         set({ token, isAuthenticated: !!token });
-        api.setToken(token);
+        apiClient.setToken(token);
       },
 
       login: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await api.login(email, password);
+          const response = await apiClient.login(email, password);
           set({ 
             user: response.user, 
             token: response.token, 
             isLoading: false,
             isAuthenticated: true 
           });
-          api.setToken(response.token);
+          apiClient.setToken(response.token);
         } catch (error: any) {
           set({ error: error.message, isLoading: false });
           throw error;
@@ -56,14 +61,14 @@ export const useAuthStore = create<AuthState>()(
       register: async (email, password, name) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await api.register(email, password, name);
+          const response = await apiClient.register(email, password, name);
           set({ 
             user: response.user, 
             token: response.token, 
             isLoading: false,
             isAuthenticated: true 
           });
-          api.setToken(response.token);
+          apiClient.setToken(response.token);
         } catch (error: any) {
           set({ error: error.message, isLoading: false });
           throw error;
@@ -72,10 +77,10 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          await api.logout();
+          await apiClient.logout();
         } finally {
           set({ user: null, token: null, isAuthenticated: false });
-          api.setToken(null);
+          apiClient.setToken(null);
         }
       },
 
@@ -86,22 +91,22 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
 
-        api.setToken(token);
+        apiClient.setToken(token);
         set({ isLoading: true });
         
         try {
-          const user = await api.getMe();
+          const user = await apiClient.getMe();
           set({ user, isLoading: false, isAuthenticated: true });
         } catch (error) {
           set({ user: null, token: null, isLoading: false, isAuthenticated: false });
-          api.setToken(null);
+          apiClient.setToken(null);
         }
       },
 
       updateProfile: async (data) => {
         set({ isLoading: true, error: null });
         try {
-          const user = await api.updateProfile(data);
+          const user = await apiClient.updateProfile(data);
           set({ user: { ...get().user!, ...user }, isLoading: false });
         } catch (error: any) {
           set({ error: error.message, isLoading: false });
