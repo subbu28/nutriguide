@@ -30,6 +30,15 @@ import healthRoutes from './routes/health.js';
 
 dotenv.config();
 
+// Validate required environment variables
+const requiredEnvVars = ['JWT_SECRET', 'COOKIE_SECRET', 'DATABASE_URL'] as const;
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`FATAL: Required environment variable ${envVar} is not set`);
+    process.exit(1);
+  }
+}
+
 const fastify = Fastify({
   logger: {
     level: process.env.LOG_LEVEL || 'info',
@@ -42,68 +51,69 @@ const fastify = Fastify({
   },
 });
 
-// Register plugins
-await fastify.register(cors, {
-  origin: process.env.CORS_ORIGIN || true,
-  credentials: true,
-});
-
-await fastify.register(jwt, {
-  secret: process.env.JWT_SECRET!,
-  cookie: {
-    cookieName: 'token',
-    signed: true,
-  },
-});
-
-await fastify.register(cookie, {
-  secret: process.env.COOKIE_SECRET!,
-  parseOptions: {},
-});
-
-await fastify.register(websocket);
-
-// Register routes
-await fastify.register(authRoutes, { prefix: '/api/auth' });
-await fastify.register(userRoutes, { prefix: '/api/user' });
-await fastify.register(mealRoutes, { prefix: '/api/meals' });
-await fastify.register(favoriteRoutes, { prefix: '/api/favorites' });
-await fastify.register(familyRoutes, { prefix: '/api/family' });
-await fastify.register(pollRoutes, { prefix: '/api/polls' });
-await fastify.register(chatRoutes, { prefix: '/api/chat' });
-await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
-await fastify.register(paymentRoutes, { prefix: '/api/payments' });
-await fastify.register(couponRoutes, { prefix: '/api/coupons' });
-await fastify.register(paymentMethodRoutes, { prefix: '/api/payment-methods' });
-await fastify.register(mealPlannerRoutes, { prefix: '/api/mealplanner' });
-await fastify.register(recipeRoutes, { prefix: '/api/recipes' });
-await fastify.register(reviewRoutes, { prefix: '/api/reviews' });
-await fastify.register(shoppingListRoutes, { prefix: '/api/shopping-lists' });
-await fastify.register(mealHistoryRoutes, { prefix: '/api/meal-history' });
-await fastify.register(socialRoutes, { prefix: '/api/social' });
-await fastify.register(aiRoutes, { prefix: '/api/ai' });
-await fastify.register(healthRoutes, { prefix: '/health' });
-
-// WebSocket setup
-setupWebSocket(fastify);
-
-// Graceful shutdown
-const closeGracefully = async (signal: string) => {
-  fastify.log.info(`Received signal ${signal}, closing server gracefully...`);
-  await fastify.close();
-  await prisma.$disconnect();
-  process.exit(0);
-};
-
-process.on('SIGINT', () => closeGracefully('SIGINT'));
-process.on('SIGTERM', () => closeGracefully('SIGTERM'));
-
-// Start server
 try {
+  // Register plugins
+  await fastify.register(cors, {
+    origin: process.env.CORS_ORIGIN || true,
+    credentials: true,
+  });
+
+  // cookie must be registered before jwt when using signed cookies
+  await fastify.register(cookie, {
+    secret: process.env.COOKIE_SECRET!,
+    parseOptions: {},
+  });
+
+  await fastify.register(jwt, {
+    secret: process.env.JWT_SECRET!,
+    cookie: {
+      cookieName: 'token',
+      signed: true,
+    },
+  });
+
+  await fastify.register(websocket);
+
+  // Register routes
+  await fastify.register(authRoutes, { prefix: '/api/auth' });
+  await fastify.register(userRoutes, { prefix: '/api/user' });
+  await fastify.register(mealRoutes, { prefix: '/api/meals' });
+  await fastify.register(favoriteRoutes, { prefix: '/api/favorites' });
+  await fastify.register(familyRoutes, { prefix: '/api/family' });
+  await fastify.register(pollRoutes, { prefix: '/api/polls' });
+  await fastify.register(chatRoutes, { prefix: '/api/chat' });
+  await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
+  await fastify.register(paymentRoutes, { prefix: '/api/payments' });
+  await fastify.register(couponRoutes, { prefix: '/api/coupons' });
+  await fastify.register(paymentMethodRoutes, { prefix: '/api/payment-methods' });
+  await fastify.register(mealPlannerRoutes, { prefix: '/api/mealplanner' });
+  await fastify.register(recipeRoutes, { prefix: '/api/recipes' });
+  await fastify.register(reviewRoutes, { prefix: '/api/reviews' });
+  await fastify.register(shoppingListRoutes, { prefix: '/api/shopping-lists' });
+  await fastify.register(mealHistoryRoutes, { prefix: '/api/meal-history' });
+  await fastify.register(socialRoutes, { prefix: '/api/social' });
+  await fastify.register(aiRoutes, { prefix: '/api/ai' });
+  await fastify.register(healthRoutes, { prefix: '/health' });
+
+  // WebSocket setup
+  setupWebSocket(fastify);
+
+  // Graceful shutdown
+  const closeGracefully = async (signal: string) => {
+    fastify.log.info(`Received signal ${signal}, closing server gracefully...`);
+    await fastify.close();
+    await prisma.$disconnect();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => closeGracefully('SIGINT'));
+  process.on('SIGTERM', () => closeGracefully('SIGTERM'));
+
+  // Start server
   const port = parseInt(process.env.PORT || '3001');
   await fastify.listen({ port, host: '0.0.0.0' });
   fastify.log.info(`Server listening on port ${port}`);
 } catch (err) {
-  fastify.log.error(err);
+  console.error('FATAL: Server failed to start:', err);
   process.exit(1);
 }
